@@ -125,6 +125,12 @@ Active development areas:
 
 ---
 
+## Note
+
+The test version is hardcoded to pull stablecoins at 5 minute intervals for testing - dynamic dates & times are used in production based on user input
+
+---
+
 ## Contact
 
 **Darren Wycherley** — Founder  
