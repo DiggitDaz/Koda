@@ -41,9 +41,6 @@ db.js
 subscriptions.js
 routes
 
-# Solidity contracts (live in separate repo)
-*.sol
-
 # Misc
 *.pptx
 *.pdf
