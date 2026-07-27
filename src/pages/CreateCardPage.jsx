@@ -6,13 +6,12 @@ import axios from 'axios';
 import PhoneInput, { isValidPhoneNumber } from 'react-phone-number-input';
 import 'react-phone-number-input/style.css';
 
+// Stripe Issuing on a UK account only supports EEA + UK billing addresses.
+// Non-EEA countries (US, CA, AU, NZ, AE) are excluded.
 const COUNTRIES = [
     { code: 'GB', name: 'United Kingdom' },
-    { code: 'US', name: 'United States' },
-    { code: 'AU', name: 'Australia' },
     { code: 'AT', name: 'Austria' },
     { code: 'BE', name: 'Belgium' },
-    { code: 'CA', name: 'Canada' },
     { code: 'DK', name: 'Denmark' },
     { code: 'FI', name: 'Finland' },
     { code: 'FR', name: 'France' },
@@ -21,13 +20,11 @@ const COUNTRIES = [
     { code: 'IT', name: 'Italy' },
     { code: 'LU', name: 'Luxembourg' },
     { code: 'NL', name: 'Netherlands' },
-    { code: 'NZ', name: 'New Zealand' },
     { code: 'NO', name: 'Norway' },
     { code: 'PT', name: 'Portugal' },
     { code: 'ES', name: 'Spain' },
     { code: 'SE', name: 'Sweden' },
     { code: 'CH', name: 'Switzerland' },
-    { code: 'AE', name: 'UAE' },
 ];
 
 const EMPTY = {
