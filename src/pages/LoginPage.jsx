@@ -44,7 +44,7 @@ const LoginPage = () => {
 
     return (
         <Page>
-            {// Left panel}
+            
             <LeftPanel>
                 <PanelContent>
                     <PanelLogo onClick={() => navigate('/')}>
@@ -70,7 +70,7 @@ const LoginPage = () => {
                 </PanelContent>
             </LeftPanel>
 
-            {// Right panel}
+            
             <RightPanel>
                 <FormCard>
                     <FormHeader>

@@ -17,7 +17,7 @@ import BridgeComponent from '../components/BridgeComponent.jsx';
 import { arcSend } from '../lib/arcRpc.js';
 import BalanceHistoryChart, { recordBalanceSnapshot } from '../components/BalanceHistoryChart.jsx';
 
-const TAPUSDC_ADDRESS   = '0x69053637FF706bD2691ABCEbc9D36E61445343Cf';
+const TAPUSDC_ADDRESS   = '0xCb96C70be34cd6484e69D1BEd5ad2F22602191e3';
 const LIMIT_ABI = [
     'function getAvailableSpendingToday(address account) view returns (uint256)',
     'function dailySpendingLimit(address account) view returns (uint256)',

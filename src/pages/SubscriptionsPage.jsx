@@ -7,7 +7,7 @@ import { useAuth } from '../context/AuthContext.js';
 import { useWallet } from '../context/WalletContext.js';
 import { arcProvider } from '../lib/arcRpc.js';
 
-const TAPUSDC_ADDR    = '0x69053637FF706bD2691ABCEbc9D36E61445343Cf';
+const TAPUSDC_ADDR    = '0xCb96C70be34cd6484e69D1BEd5ad2F22602191e3';
 const CONTRACT_ADDR   = '';
 const API_BASE        = 'https://chainfree.site:7001';
 

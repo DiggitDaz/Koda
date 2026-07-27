@@ -237,14 +237,14 @@ const TestStorePage = () => {
 
     return (
         <StorePage>
-            {// Top announcement strip}
+            
             <AnnouncementStrip>
                 <Zap size={12} />
                 FREE DELIVERY OVER £10 &nbsp;·&nbsp; SAME DAY DISPATCH BEFORE 2PM &nbsp;·&nbsp; 30-DAY RETURNS
                 <Shield size={12} />
             </AnnouncementStrip>
 
-            {// Store header}
+        
             <StoreHeader>
                 <StoreBrand>
                     <StoreLogo>⚒</StoreLogo>
@@ -273,14 +273,14 @@ const TestStorePage = () => {
                 </StoreHeaderRight>
             </StoreHeader>
 
-            {// Category nav}
+            
             <CategoryNav>
                 {['All Departments', 'Power Tools', 'Hand Tools', 'Measuring', 'Ladders & Access', 'Storage', 'Fixings'].map(c => (
                     <CategoryPill key={c} $active={c === 'All Departments'}>{c}</CategoryPill>
                 ))}
             </CategoryNav>
 
-            {// Hero banner}
+            
             <HeroBanner>
                 <HeroStripes />
                 <HeroContent>
@@ -299,7 +299,7 @@ const TestStorePage = () => {
                 </HeroVisual>
             </HeroBanner>
 
-            {// Products}
+            
             <ProductsSection>
                 <ProductsSectionHeader>
                     <ProductsSectionTitle>Featured Products</ProductsSectionTitle>
@@ -354,7 +354,7 @@ const TestStorePage = () => {
                 </ProductGrid>
             </ProductsSection>
 
-            {// Footer}
+            
             <StoreFooter>
                 <FooterLogo>⚒ Bolt &amp; Board Co.</FooterLogo>
                 <FooterMeta>
@@ -362,7 +362,7 @@ const TestStorePage = () => {
                 </FooterMeta>
             </StoreFooter>
 
-            {// Payment modal}
+            
             {cart && (
                 <ModalOverlay onClick={(e) => e.target === e.currentTarget && closeCart()}>
                     <PayModal>

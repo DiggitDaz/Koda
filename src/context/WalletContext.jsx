@@ -14,7 +14,7 @@ let suppressChainReload = false;
 export const setSuppressChainReload = (val) => { suppressChainReload = val; };
 
 const USDC_ADDR    = '0x3600000000000000000000000000000000000000';
-const TAPUSDC_ADDR = '0x69053637FF706bD2691ABCEbc9D36E61445343Cf';
+const TAPUSDC_ADDR = '0xCb96C70be34cd6484e69D1BEd5ad2F22602191e3';
 const ERC20_ABI    = ['function balanceOf(address) view returns (uint256)'];
 const API_BASE     = 'https://chainfree.site:7001';
 const STORAGE_KEY  = 'koda_wallet_type';

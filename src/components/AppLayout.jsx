@@ -8,9 +8,9 @@ import kodaLogo from '../assets/koda-logo.png';
 import { arcSend } from '../lib/arcRpc.js';
 import { ethers } from 'ethers';
 
-const TAPUSDC_ADDRESS = '0x69053637FF706bD2691ABCEbc9D36E61445343Cf';
+const TAPUSDC_ADDRESS = '0xCb96C70be34cd6484e69D1BEd5ad2F22602191e3';
 const USDC_ADDRESS    = '0x3600000000000000000000000000000000000000';
-const WRAPPER_ADDRESS = '0xee6E98d6Da6B5FaeD46FEBD5b920cdB7e1896564';
+const WRAPPER_ADDRESS = '0x9D845625eb0010F9a63213240Da722424C684DCf';
 
 const ERC20_IFACE = new ethers.Interface([
     'function totalSupply() view returns (uint256)',
