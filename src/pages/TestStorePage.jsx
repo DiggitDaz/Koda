@@ -88,7 +88,7 @@ const TestStorePage = () => {
         if (cardId) return;
         const token = localStorage.getItem('authToken');
         if (!token) return;
-        axios.get('https://chainfree.site:7001/user/cards', {
+        axios.get(`${import.meta.env.VITE_AUTH_URL}/user/cards`, {
             headers: { Authorization: `Bearer ${token}` },
         }).then(res => {
             if (res.data.success && res.data.data?.length > 0) {
@@ -104,6 +104,19 @@ const TestStorePage = () => {
     const [payStatus,   setPayStatus]   = useState(null);
     const [txHash,      setTxHash]      = useState('');
     const [payError,    setPayError]    = useState('');
+    const [fxRates,     setFxRates]     = useState(null);
+
+    const activeCurrency = localStorage.getItem('kodaCurrency') || 'TAPUSDC';
+
+    useEffect(() => {
+        const today     = new Date().toISOString().slice(0, 10);
+        const yesterday = new Date(Date.now() - 864e5).toISOString().slice(0, 10);
+        const fxUrl     = v => `https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@${v}/v1/currencies/gbp.json`;
+        fetch(fxUrl(today))
+            .then(r => r.ok ? r.json() : fetch(fxUrl(yesterday)).then(r2 => r2.json()))
+            .then(d => setFxRates({ usd: d.gbp.usd, eur: d.gbp.eur }))
+            .catch(() => {});
+    }, []);
 
     const [cardNumber,       setCardNumber]       = useState('');
     const [expiry,           setExpiry]           = useState('');
@@ -197,12 +210,14 @@ const TestStorePage = () => {
             return;
         }
 
-        const delivery = parseFloat(cart.price) >= 10 ? 0 : 2.99;
-        const total    = parseFloat(cart.price) + delivery;
+        const delivery   = parseFloat(cart.price) >= 10 ? 0 : 2.99;
+        const gbpTotal   = parseFloat(cart.price) + delivery;
+        const fxRate     = activeCurrency === 'TAPEURC' ? (fxRates?.eur || 1.18) : (fxRates?.usd || 1.27);
+        const tokenAmt   = gbpTotal * fxRate;
 
-        const balance = parseFloat(balances.TAPUSDC || '0');
-        if (balance < total) {
-            setPayError(`Insufficient balance. You need ${total.toFixed(2)} TAPUSDC but have ${fmt(balances.TAPUSDC)}.`);
+        const balance = parseFloat(balances[activeCurrency] || '0');
+        if (balance < tokenAmt) {
+            setPayError(`Insufficient balance. You need ${tokenAmt.toFixed(2)} ${activeCurrency} but have ${fmt(balances[activeCurrency])}.`);
             return;
         }
 
@@ -210,11 +225,17 @@ const TestStorePage = () => {
         setPayError('');
 
         try {
-            const res = await axios.post('https://chainfree.site:7000/simulate-card-purchase', {
+            const res = await axios.post(`${import.meta.env.VITE_API_URL}/simulate-card-purchase`, {
                 cardId,
-                amount:       total,
+                amount:       gbpTotal,
+                currency:     activeCurrency,
+                tokenAmount:  tokenAmt.toFixed(6),
                 merchantName: 'Bolt & Board Co.',
                 category:     'hardware_stores',
+                // Card details for backend validation against the issued Stripe card
+                cardNumber:   cardNumber.replace(/\s/g, ''),
+                cardExpiry:   expiry,   // MM/YY
+                cardCvv:      cvv,
             });
 
             if (res.data.success && res.data.authorization?.approved) {
@@ -233,7 +254,8 @@ const TestStorePage = () => {
         }
     };
 
-    const tapusdcBalance = parseFloat(balances.TAPUSDC || '0');
+    const cartDelivery  = cart ? (parseFloat(cart.price) >= 10 ? 0 : 2.99) : 0;
+    const cartGbpTotal  = cart ? parseFloat(cart.price) + cartDelivery : 0;
 
     return (
         <StorePage>
@@ -380,7 +402,7 @@ const TestStorePage = () => {
                                 </SuccessRing>
                                 <SuccessTitle>Payment approved</SuccessTitle>
                                 <SuccessItem>{cart.name}</SuccessItem>
-                                <SuccessAmount>£{cart.price}</SuccessAmount>
+                                <SuccessAmount>£{cartGbpTotal.toFixed(2)}</SuccessAmount>
                                 <SuccessRef>Auth ref: {txHash || '—'}</SuccessRef>
                                 <SuccessSettled>
                                     ⛓ Settled on-chain via TAPUSDC
@@ -499,11 +521,7 @@ const TestStorePage = () => {
 
                                 <PayTotalRow>
                                     <PayTotalLabel>Total</PayTotalLabel>
-                                    <PayTotalAmount>
-                                        £{parseFloat(cart.price) >= 10
-                                            ? cart.price
-                                            : (parseFloat(cart.price) + 2.99).toFixed(2)}
-                                    </PayTotalAmount>
+                                    <PayTotalAmount>£{cartGbpTotal.toFixed(2)}</PayTotalAmount>
                                 </PayTotalRow>
 
                                 {payError && (
@@ -521,9 +539,7 @@ const TestStorePage = () => {
                                     {paying ? (
                                         <><PaySpinner /> Processing payment…</>
                                     ) : (
-                                        <>🔒 Pay £{parseFloat(cart.price) >= 10
-                                            ? cart.price
-                                            : (parseFloat(cart.price) + 2.99).toFixed(2)}</>
+                                        <>🔒 Pay £{cartGbpTotal.toFixed(2)}</>
                                     )}
                                 </PayConfirmBtn>
 
@@ -1080,6 +1096,7 @@ const ModalOverlay = styled.div`
     @media (max-width: 768px) {
         align-items: flex-start;
         padding: 16px;
+        overflow-y: auto;
     }
 `;
 

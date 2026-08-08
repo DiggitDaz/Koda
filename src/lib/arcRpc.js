@@ -9,11 +9,18 @@ export const ARC_RPC_PROXY = import.meta.env.DEV
     ? 'https://rpc.blockdaemon.testnet.arc.network'
     : `${window.location.origin}/.netlify/functions/rpc`;
 
-const RPCS = [
-    'https://rpc.testnet.arc.network',
-    'https://rpc.blockdaemon.testnet.arc.network',
-    'https://rpc.drpc.testnet.arc.network',
-];
+// In dev, rpc.testnet.arc.network blocks CORS from localhost — use blockdaemon first.
+const RPCS = import.meta.env.DEV
+    ? [
+        'https://rpc.blockdaemon.testnet.arc.network',
+        'https://rpc.drpc.testnet.arc.network',
+        'https://rpc.testnet.arc.network',
+    ]
+    : [
+        'https://rpc.testnet.arc.network',
+        'https://rpc.blockdaemon.testnet.arc.network',
+        'https://rpc.drpc.testnet.arc.network',
+    ];
 
 const _providers = RPCS.map(url => new ethers.JsonRpcProvider(url));
 

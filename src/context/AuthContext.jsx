@@ -3,7 +3,7 @@ import axios from 'axios';
 
 const AuthContext = createContext(null);
 
-axios.defaults.baseURL = 'https://chainfree.site:7001';
+axios.defaults.baseURL = import.meta.env.VITE_AUTH_URL;
 
 export const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);

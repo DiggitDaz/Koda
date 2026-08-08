@@ -26,7 +26,11 @@ export async function getUniversalConnector() {
             name: 'Koda',
             description: 'Spend USDC from self-custody',
             url: 'https://kodafi.xyz',
-            icons: ['https://kodafi.xyz/logo.png']
+            icons: ['https://kodafi.xyz/logo.png'],
+            redirect: {
+                universal: 'https://kodafi.xyz',
+                native: '',
+            },
         },
         networks: [
             {
@@ -39,7 +43,10 @@ export async function getUniversalConnector() {
                 ],
                 chains: [arcTestnet],
                 events: ['chainChanged', 'accountsChanged'],
-                namespace: 'eip155'
+                namespace: 'eip155',
+                rpcMap: {
+                    '5042002': 'https://rpc.testnet.arc.network',
+                },
             }
         ]
     })

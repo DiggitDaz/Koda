@@ -9,7 +9,7 @@ import { arcProvider } from '../lib/arcRpc.js';
 
 const TAPUSDC_ADDR    = '0xCb96C70be34cd6484e69D1BEd5ad2F22602191e3';
 const CONTRACT_ADDR   = '';
-const API_BASE        = 'https://chainfree.site:7001';
+const API_BASE        = import.meta.env.VITE_AUTH_URL;
 
 const ERC20_ABI = [
     'function approve(address spender, uint256 amount) public returns (bool)',

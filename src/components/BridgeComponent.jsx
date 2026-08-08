@@ -141,7 +141,7 @@ const BridgeComponent = ({ connector, walletAddress, onClose, onSuccess }) => {
                     chainName: 'Arc Testnet',
                     rpcUrls: [ARC_RPC_PROXY],
                     nativeCurrency: { name: 'USDC', symbol: 'USDC', decimals: 18 },
-                    blockExplorerUrls: ['https://testnet.arcscan.app'],
+                    blockExplorerUrls: [import.meta.env.VITE_EXPLORER_URL],
                 }],
             });
         } catch {
@@ -157,7 +157,7 @@ const BridgeComponent = ({ connector, walletAddress, onClose, onSuccess }) => {
     // Polls the CCTP V2 messages API using the burn tx hash.
     // Returns { attestation, messageBytes } when complete.
     const pollAttestation = async (burnTxHash) => {
-        const url = `https://iris-api-sandbox.circle.com/v2/messages/${BASE_DOMAIN}?transactionHash=${burnTxHash}`;
+        const url = `${import.meta.env.VITE_CCTP_API_URL}/v2/messages/${BASE_DOMAIN}?transactionHash=${burnTxHash}`;
         elapsedRef.current = 0;
         setAttestElapsed(0);
 
@@ -453,7 +453,7 @@ const BridgeComponent = ({ connector, walletAddress, onClose, onSuccess }) => {
                             {autoWrap ? 'Bridged and wrapped successfully' : 'Bridged successfully'}
                             {mintTxHash && (
                                 <TxLink
-                                    href={`https://testnet.arcscan.app/tx/${mintTxHash}`}
+                                    href={`${import.meta.env.VITE_EXPLORER_URL}/tx/${mintTxHash}`}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                 >

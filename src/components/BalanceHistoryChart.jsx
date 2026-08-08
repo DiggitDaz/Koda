@@ -2,17 +2,19 @@ import { useState, useEffect, useRef } from 'react';
 import styled from 'styled-components';
 
 const HISTORY_KEY = 'koda_balance_history';
-const MIN_GAP_MS  = 5 * 60 * 1000; // one snapshot per 5 min max
+const MIN_GAP_MS  = 5 * 60 * 1000;
 
-export function recordBalanceSnapshot(tapusdc, usdc) {
+export function recordBalanceSnapshot(tapusdc, usdc, tapeurc = 0, eurc = 0) {
     try {
         const history = JSON.parse(localStorage.getItem(HISTORY_KEY) ?? '[]');
         const last = history[history.length - 1];
         if (last && Date.now() - last.ts < MIN_GAP_MS) return;
-        const tap = parseFloat(tapusdc) || 0;
-        const usd = parseFloat(usdc)    || 0;
-        if (tap === 0 && usd === 0) return;
-        history.push({ ts: Date.now(), tap, usd });
+        const tap    = parseFloat(tapusdc) || 0;
+        const usd    = parseFloat(usdc)    || 0;
+        const tapeur = parseFloat(tapeurc) || 0;
+        const eur    = parseFloat(eurc)    || 0;
+        if (tap === 0 && usd === 0 && tapeur === 0 && eur === 0) return;
+        history.push({ ts: Date.now(), tap, usd, tapeur, eur });
         localStorage.setItem(HISTORY_KEY, JSON.stringify(history.slice(-8640)));
     } catch {}
 }
@@ -23,8 +25,7 @@ const SVG_H = 200;
 const PAD   = { t: 20, r: 20, b: 34, l: 52 };
 
 function makePath(pts) {
-    if (!pts.length) return '';
-    if (pts.length === 1) return `M${pts[0].x},${pts[0].y}`;
+    if (pts.length < 2) return '';
     let d = `M${pts[0].x},${pts[0].y}`;
     for (let i = 1; i < pts.length; i++) {
         const p0 = pts[Math.max(0, i - 2)];
@@ -62,9 +63,16 @@ function fmtAmount(v) {
     return (v ?? 0).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+const SERIES = {
+    tap:    { color: '#4F55F1', label: 'TAPUSDC', grad: 'gtap'    },
+    usd:    { color: '#00A87E', label: 'USDC',    grad: 'gusd'    },
+    tapeur: { color: '#f59e0b', label: 'TAPEURC', grad: 'gtapeur' },
+    eur:    { color: '#d97706', label: 'EURC',    grad: 'geur'    },
+};
+
 // Component
 
-const BalanceHistoryChart = ({ tapusdcBalance, usdcBalance }) => {
+const BalanceHistoryChart = ({ tapusdcBalance, usdcBalance, tapeurcBalance, eurcBalance }) => {
     const [period,  setPeriod]  = useState('week');
     const [history, setHistory] = useState([]);
     const [tooltip, setTooltip] = useState(null);
@@ -75,7 +83,7 @@ const BalanceHistoryChart = ({ tapusdcBalance, usdcBalance }) => {
         try {
             setHistory(JSON.parse(localStorage.getItem(HISTORY_KEY) ?? '[]'));
         } catch {}
-    }, [tapusdcBalance, usdcBalance]);
+    }, [tapusdcBalance, usdcBalance, tapeurcBalance, eurcBalance]);
 
     useEffect(() => {
         const el = wrapRef.current;
@@ -88,35 +96,43 @@ const BalanceHistoryChart = ({ tapusdcBalance, usdcBalance }) => {
 
     const now    = Date.now();
     const cutoff = period === 'week' ? now - 7 * 86400000 : now - 30 * 86400000;
-    const data   = history.filter(h => h.ts >= cutoff);
+
+    // Sort by timestamp — prevents backwards line segments
+    const data = history
+        .filter(h => h.ts >= cutoff)
+        .sort((a, b) => a.ts - b.ts);
 
     const cW     = svgW - PAD.l - PAD.r;
     const cH     = SVG_H - PAD.t - PAD.b;
     const bottom = PAD.t + cH;
 
-    const allVals = data.flatMap(d => [d.tap, d.usd]).filter(v => v > 0);
-    const maxVal  = allVals.length ? Math.max(...allVals) * 1.15 : 10;
-
+    // x spans actual data range: first snapshot → last snapshot
     const t0   = data[0]?.ts ?? now;
-    const span = (data[data.length - 1]?.ts ?? now) - t0 || 1;
+    const t1   = data[data.length - 1]?.ts ?? now;
+    const span = t1 - t0 || 1;
+    const toX  = ts => PAD.l + ((ts - t0) / span) * cW;
 
-    const toX = ts => PAD.l + ((ts - t0) / span) * cW;
-    const toY = v  => PAD.t + cH - (v / maxVal) * cH;
+    const allVals = data.flatMap(d => [d.tap, d.usd, d.tapeur ?? 0, d.eur ?? 0]).filter(v => v > 0);
+    const maxVal  = allVals.length ? Math.max(...allVals) * 1.15 : 10;
+    const toY     = v => PAD.t + cH - (v / maxVal) * cH;
 
-    const tapPts  = data.map(d => ({ x: toX(d.ts), y: toY(d.tap), ...d }));
-    const usdcPts = data.map(d => ({ x: toX(d.ts), y: toY(d.usd), ...d }));
+    const tapPts    = data.map(d => ({ x: toX(d.ts), y: toY(d.tap),         ...d }));
+    const usdPts    = data.map(d => ({ x: toX(d.ts), y: toY(d.usd),         ...d }));
+    const tapeurPts = data.map(d => ({ x: toX(d.ts), y: toY(d.tapeur ?? 0), ...d }));
+    const eurPts    = data.map(d => ({ x: toX(d.ts), y: toY(d.eur    ?? 0), ...d }));
+
+    const hasEurData = data.some(d => (d.tapeur ?? 0) > 0 || (d.eur ?? 0) > 0);
 
     const yTicks = [0, 0.25, 0.5, 0.75, 1].map(t => ({
         v: maxVal * t,
         y: PAD.t + cH * (1 - t),
     }));
 
-    const xLabels = data.length >= 2
-        ? Array.from({ length: 5 }, (_, i) => {
-              const idx = Math.round(i * (data.length - 1) / 4);
-              return { ts: data[idx].ts, x: toX(data[idx].ts) };
-          })
-        : [];
+    // 4 evenly-spaced labels across the actual data range
+    const xLabels = [0, 1, 2, 3].map(i => ({
+        ts: t0 + (i / 3) * span,
+        x:  PAD.l + (i / 3) * cW,
+    }));
 
     const hasData = data.length >= 2;
 
@@ -128,22 +144,27 @@ const BalanceHistoryChart = ({ tapusdcBalance, usdcBalance }) => {
             const d = Math.abs(p.x - mx);
             if (d < bestDist) { bestDist = d; best = p; }
         });
-        setTooltip({ x: best.x, tap: best.tap, usd: best.usd, ts: best.ts });
+        setTooltip({ x: best.x, tap: best.tap, usd: best.usd, tapeur: best.tapeur ?? 0, eur: best.eur ?? 0, ts: best.ts });
     };
 
     return (
         <ChartCard>
             <ChartHeader>
                 <ChartTitle>Balance history</ChartTitle>
-                <ChartLegend>
-                    <LegendItem><LegendDot $c="#4F55F1" />TAPUSDC</LegendItem>
-                    <LegendItem><LegendDot $c="#00A87E" />USDC</LegendItem>
-                </ChartLegend>
                 <PeriodToggle>
                     <PeriodBtn $active={period === 'week'}  onClick={() => setPeriod('week')}>1W</PeriodBtn>
                     <PeriodBtn $active={period === 'month'} onClick={() => setPeriod('month')}>1M</PeriodBtn>
                 </PeriodToggle>
             </ChartHeader>
+
+            <ChartLegend>
+                <LegendItem><LegendDot $c={SERIES.tap.color} />TAPUSDC</LegendItem>
+                <LegendItem><LegendDot $c={SERIES.usd.color} />USDC</LegendItem>
+                {hasEurData && <>
+                    <LegendItem><LegendDot $c={SERIES.tapeur.color} />TAPEURC</LegendItem>
+                    <LegendItem><LegendDot $c={SERIES.eur.color} />EURC</LegendItem>
+                </>}
+            </ChartLegend>
 
             <ChartWrap ref={wrapRef} onMouseMove={handleMouseMove} onMouseLeave={() => setTooltip(null)}>
                 {!hasData ? (
@@ -153,12 +174,20 @@ const BalanceHistoryChart = ({ tapusdcBalance, usdcBalance }) => {
                         <svg width={svgW} height={SVG_H} style={{ display: 'block' }}>
                             <defs>
                                 <linearGradient id="gtap" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="0%"   stopColor="#4F55F1" stopOpacity="0.3" />
-                                    <stop offset="100%" stopColor="#4F55F1" stopOpacity="0"   />
+                                    <stop offset="0%"   stopColor="#4F55F1" stopOpacity="0.25" />
+                                    <stop offset="100%" stopColor="#4F55F1" stopOpacity="0"    />
                                 </linearGradient>
                                 <linearGradient id="gusd" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="0%"   stopColor="#00A87E" stopOpacity="0.25" />
+                                    <stop offset="0%"   stopColor="#00A87E" stopOpacity="0.2"  />
                                     <stop offset="100%" stopColor="#00A87E" stopOpacity="0"    />
+                                </linearGradient>
+                                <linearGradient id="gtapeur" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="0%"   stopColor="#f59e0b" stopOpacity="0.25" />
+                                    <stop offset="100%" stopColor="#f59e0b" stopOpacity="0"    />
+                                </linearGradient>
+                                <linearGradient id="geur" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="0%"   stopColor="#d97706" stopOpacity="0.2"  />
+                                    <stop offset="100%" stopColor="#d97706" stopOpacity="0"    />
                                 </linearGradient>
                             </defs>
 
@@ -185,14 +214,24 @@ const BalanceHistoryChart = ({ tapusdcBalance, usdcBalance }) => {
                             ))}
 
                             {/* Area fills */}
-                            <path d={makeArea(tapPts,  bottom)} fill="url(#gtap)" />
-                            <path d={makeArea(usdcPts, bottom)} fill="url(#gusd)" />
+                            <path d={makeArea(tapPts,  bottom)} fill="url(#gtap)"    />
+                            <path d={makeArea(usdPts,  bottom)} fill="url(#gusd)"    />
+                            {hasEurData && <>
+                                <path d={makeArea(tapeurPts, bottom)} fill="url(#gtapeur)" />
+                                <path d={makeArea(eurPts,    bottom)} fill="url(#geur)"    />
+                            </>}
 
                             {/* Lines */}
-                            <path d={makePath(tapPts)}  fill="none" stroke="#4F55F1" strokeWidth="2"
+                            <path d={makePath(tapPts)} fill="none" stroke="#4F55F1" strokeWidth="2"
                                 strokeLinejoin="round" strokeLinecap="round" />
-                            <path d={makePath(usdcPts)} fill="none" stroke="#00A87E" strokeWidth="2"
+                            <path d={makePath(usdPts)} fill="none" stroke="#00A87E" strokeWidth="2"
                                 strokeLinejoin="round" strokeLinecap="round" />
+                            {hasEurData && <>
+                                <path d={makePath(tapeurPts)} fill="none" stroke="#f59e0b" strokeWidth="2"
+                                    strokeLinejoin="round" strokeLinecap="round" />
+                                <path d={makePath(eurPts)} fill="none" stroke="#d97706" strokeWidth="2"
+                                    strokeLinejoin="round" strokeLinecap="round" />
+                            </>}
 
                             {/* Crosshair + dots */}
                             {tooltip && (
@@ -203,6 +242,12 @@ const BalanceHistoryChart = ({ tapusdcBalance, usdcBalance }) => {
                                         fill="#4F55F1" stroke="#121212" strokeWidth="2" />
                                     <circle cx={tooltip.x} cy={toY(tooltip.usd)} r="4"
                                         fill="#00A87E" stroke="#121212" strokeWidth="2" />
+                                    {hasEurData && <>
+                                        <circle cx={tooltip.x} cy={toY(tooltip.tapeur)} r="4"
+                                            fill="#f59e0b" stroke="#121212" strokeWidth="2" />
+                                        <circle cx={tooltip.x} cy={toY(tooltip.eur)} r="4"
+                                            fill="#d97706" stroke="#121212" strokeWidth="2" />
+                                    </>}
                                 </>
                             )}
                         </svg>
@@ -228,6 +273,18 @@ const BalanceHistoryChart = ({ tapusdcBalance, usdcBalance }) => {
                                     <span>USDC</span>
                                     <TooltipVal>{fmtAmount(tooltip.usd)}</TooltipVal>
                                 </TooltipRow>
+                                {hasEurData && <>
+                                    <TooltipRow>
+                                        <TooltipDot $c="#f59e0b" />
+                                        <span>TAPEURC</span>
+                                        <TooltipVal>{fmtAmount(tooltip.tapeur)}</TooltipVal>
+                                    </TooltipRow>
+                                    <TooltipRow>
+                                        <TooltipDot $c="#d97706" />
+                                        <span>EURC</span>
+                                        <TooltipVal>{fmtAmount(tooltip.eur)}</TooltipVal>
+                                    </TooltipRow>
+                                </>}
                             </Tooltip>
                         )}
                     </>
@@ -251,7 +308,7 @@ const ChartHeader = styled.div`
     display: flex;
     align-items: center;
     gap: 12px;
-    margin-bottom: 12px;
+    margin-bottom: 8px;
 `;
 
 const ChartTitle = styled.h3`
@@ -267,6 +324,8 @@ const ChartLegend = styled.div`
     display: flex;
     align-items: center;
     gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
 `;
 
 const LegendItem = styled.span`
@@ -291,6 +350,7 @@ const PeriodToggle = styled.div`
     border-radius: 8px;
     padding: 3px;
     gap: 2px;
+    flex-shrink: 0;
 `;
 
 const PeriodBtn = styled.button`

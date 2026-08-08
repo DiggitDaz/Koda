@@ -3,6 +3,7 @@ import { RefreshCw, ShieldX, Loader, Copy, Check } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useWallet } from '../context/WalletContext.js';
 import usdcLogo from '../assets/usdc-logo.png';
+import eurcLogo from '../assets/EURC-logo.png';
 
 // Detects the connected wallet's name and icon.
 // Tries EIP-6963 provider announcements first (supported by MetaMask, Rabby,
@@ -53,8 +54,10 @@ function useWalletInfo(walletType, connector) {
 }
 
 const TOKENS = [
-    { symbol: 'USDC',    name: 'USD Coin', tag: 'In wallet',  color: '#4F55F1', bg: '#4F55F130'  },
-    { symbol: 'TAPUSDC', name: 'Tap USDC', tag: 'Spendable',  color: '#4F55F1', bg: '#4F55F130' },
+    { symbol: 'USDC',    name: 'USD Coin', tag: 'In wallet',  color: '#4F55F1', bg: '#4F55F130', logo: usdcLogo },
+    { symbol: 'TAPUSDC', name: 'Tap USDC', tag: 'Spendable',  color: '#4F55F1', bg: '#4F55F130', logo: null     },
+    { symbol: 'EURC',    name: 'EUR Coin', tag: 'In wallet',  color: '#2563eb', bg: '#2563eb30', logo: eurcLogo },
+    { symbol: 'TAPEURC', name: 'Tap EURC', tag: 'Spendable',  color: '#2563eb', bg: '#2563eb30', logo: null     },
 ];
 
 const fmt = (b) => {
@@ -176,15 +179,18 @@ const WalletPage = () => {
                 <SkeletonPanel>
                     <SkeletonRow />
                     <SkeletonRow />
+                    <SkeletonRow />
+                    <SkeletonRow />
                 </SkeletonPanel>
             ) : (
                 <TokenPanel>
                     {TOKENS.map((t, i) => (
                         <div key={t.symbol}>
+                            {i === 2 && <TokenGroupDivider />}
                             <TokenRow>
                                 <TokenAvatar style={{ background: t.bg, color: t.color }}>
-                                    {t.symbol === 'USDC'
-                                        ? <img src={usdcLogo} alt="USDC" style={{ width: 28, height: 28, borderRadius: '50%' }} />
+                                    {t.logo
+                                        ? <img src={t.logo} alt={t.symbol} style={{ width: 28, height: 28, borderRadius: '50%' }} />
                                         : 'T'}
                                 </TokenAvatar>
                                 <TokenMeta>
@@ -201,7 +207,7 @@ const WalletPage = () => {
                                     <TokenNetwork>ERC-20, Arc Testnet</TokenNetwork>
                                 </TokenRight>
                             </TokenRow>
-                            {i < TOKENS.length - 1 && <TokenDivider />}
+                            {i < TOKENS.length - 1 && i !== 1 && <TokenDivider />}
                         </div>
                     ))}
                 </TokenPanel>
@@ -604,6 +610,12 @@ const TokenDivider = styled.div`
     height: 1px;
     background: #8D969E30;
     margin-left: 58px;
+`;
+
+const TokenGroupDivider = styled.div`
+    height: 1px;
+    background: rgba(255,255,255,0.1);
+    margin: 0 0;
 `;
 
 export default WalletPage;

@@ -2,22 +2,33 @@ import { useState, useEffect } from "react";
 import styled, { keyframes } from "styled-components";
 import { ArrowDown, Check, AlertCircle, X } from "lucide-react";
 import { ethers } from "ethers";
-import { arcProvider, arcSend, ARC_RPC_PROXY } from "../lib/arcRpc.js";
+import { arcSend, ARC_RPC_PROXY } from "../lib/arcRpc.js";
 
-const USDC_ADDRESS   = "0x3600000000000000000000000000000000000000";
-const WRAPPER_ADDRESS = "0x9D845625eb0010F9a63213240Da722424C684DCf";
-const TAPUSDC_ADDRESS = "0xCb96C70be34cd6484e69D1BEd5ad2F22602191e3";
+const PAIRS = {
+    USD: {
+        stablecoin:  '0x3600000000000000000000000000000000000000',
+        wrapper:     '0x9D845625eb0010F9a63213240Da722424C684DCf',
+        taptoken:    '0xCb96C70be34cd6484e69D1BEd5ad2F22602191e3',
+        stableLabel: 'USDC',
+        tapLabel:    'TAPUSDC',
+        rate:        '1 USDC = 1 TAPUSDC',
+    },
+    EUR: {
+        stablecoin:  '0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a',
+        wrapper:     '0x72d038055795631c057a3DA26c37EACa92Cb9AdB',
+        taptoken:    '0x36247A653A1253A96a286f5E296c06fF958b1ac0',
+        stableLabel: 'EURC',
+        tapLabel:    'TAPEURC',
+        rate:        '1 EURC = 1 TAPEURC',
+    },
+};
 
 const ERC20_ABI = [
-    "function balanceOf(address) view returns (uint256)",
-    "function allowance(address owner, address spender) view returns (uint256)",
-    "function approve(address spender, uint256 amount) returns (bool)",
+    'function balanceOf(address) view returns (uint256)',
+    'function allowance(address owner, address spender) view returns (uint256)',
+    'function approve(address spender, uint256 amount) returns (bool)',
 ];
-
-const WRAPPER_ABI = [
-    "function deposit(uint256 amount) external",
-];
-
+const WRAPPER_ABI = ['function deposit(uint256 amount) external'];
 const ERC20_IFACE = new ethers.Interface(ERC20_ABI);
 
 async function readBalance(tokenAddress, walletAddress) {
@@ -29,64 +40,76 @@ async function readBalance(tokenAddress, walletAddress) {
     } catch { return 0n; }
 }
 
-const usdcRead    = new ethers.Contract(USDC_ADDRESS,    ERC20_ABI, arcProvider);
-const tapusdcRead = new ethers.Contract(TAPUSDC_ADDRESS, ERC20_ABI, arcProvider);
+async function readAllowance(tokenAddress, owner, spender) {
+    const data = ERC20_IFACE.encodeFunctionData('allowance', [owner, spender]);
+    try {
+        const result = await arcSend('eth_call', [{ to: tokenAddress, data }, 'latest']);
+        if (!result || result === '0x') return 0n;
+        return ERC20_IFACE.decodeFunctionResult('allowance', result)[0];
+    } catch { return 0n; }
+}
 
 const WrapComponent = ({ connector, walletAddress, onClose, onSuccess }) => {
-    const [amount, setAmount] = useState("");
-    const [usdcBalance, setUsdcBalance] = useState("0");
-    const [tapusdcBalance, setTapusdcBalance] = useState("0");
-    const [loading, setLoading] = useState(false);
-    const [status, setStatus] = useState(null);
-    const [error, setError] = useState("");
-    const [txHash, setTxHash] = useState("");
+    const initPair = localStorage.getItem('kodaCurrency') === 'TAPEURC' ? 'EUR' : 'USD';
+
+    const [pair,          setPair]          = useState(initPair);
+    const [amount,        setAmount]        = useState('');
+    const [stableBalance, setStableBalance] = useState('0');
+    const [tapBalance,    setTapBalance]    = useState('0');
+    const [loading,       setLoading]       = useState(false);
+    const [status,        setStatus]        = useState(null);
+    const [error,         setError]         = useState('');
+    const [txHash,        setTxHash]        = useState('');
+
+    const cfg = PAIRS[pair];
 
     useEffect(() => {
         if (!walletAddress) return;
-        const fetchBalances = async () => {
-            const [usdcBal, tapusdcBal] = await Promise.all([
-                readBalance(USDC_ADDRESS,    walletAddress),
-                readBalance(TAPUSDC_ADDRESS, walletAddress),
+        setStableBalance('0');
+        setTapBalance('0');
+        (async () => {
+            const [sBal, tBal] = await Promise.all([
+                readBalance(cfg.stablecoin, walletAddress),
+                readBalance(cfg.taptoken,   walletAddress),
             ]);
-            setUsdcBalance(ethers.formatUnits(usdcBal, 6));
-            setTapusdcBalance(ethers.formatUnits(tapusdcBal, 6));
-        };
-        fetchBalances();
-    }, [walletAddress]);
+            setStableBalance(ethers.formatUnits(sBal, 6));
+            setTapBalance(ethers.formatUnits(tBal, 6));
+        })();
+    }, [walletAddress, pair]);
 
-    const handleMax = () => {
-        setAmount(usdcBalance);
-        setError("");
+    const switchPair = (p) => {
+        setPair(p);
+        setAmount('');
+        setStatus(null);
+        setError('');
+        setTxHash('');
     };
+
+    const handleMax = () => { setAmount(stableBalance); setError(''); };
 
     const formatDisplay = (val) => {
         const num = parseFloat(val);
-        if (isNaN(num)) return "0.00";
-        return num.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 });
+        if (isNaN(num)) return '0.00';
+        return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 });
     };
 
     const handleWrap = async () => {
-        if (!amount || parseFloat(amount) <= 0) {
-            setError("Enter an amount");
-            return;
-        }
-        if (parseFloat(amount) > parseFloat(usdcBalance)) {
-            setError("Insufficient USDC balance");
+        if (!amount || parseFloat(amount) <= 0) { setError('Enter an amount'); return; }
+        if (parseFloat(amount) > parseFloat(stableBalance)) {
+            setError(`Insufficient ${cfg.stableLabel} balance`);
             return;
         }
 
         setLoading(true);
-        setError("");
+        setError('');
         setStatus(null);
 
         try {
-            const provider = new ethers.BrowserProvider(connector.provider);
-            const signer = await provider.getSigner();
+            const provider     = new ethers.BrowserProvider(connector.provider);
+            const signer       = await provider.getSigner();
             const parsedAmount = ethers.parseUnits(amount, 6);
+
             try {
-                // Register our RPC proxy as MetaMask's chain RPC so MetaMask's
-                // internal eth_gasPrice calls go through our proxy (which fans out
-                // across all 3 Arc RPCs) instead of hitting rate limits directly.
                 await connector.provider.request({
                     method: 'wallet_addEthereumChain',
                     params: [{
@@ -94,43 +117,41 @@ const WrapComponent = ({ connector, walletAddress, onClose, onSuccess }) => {
                         chainName: 'Arc Testnet',
                         rpcUrls: [ARC_RPC_PROXY],
                         nativeCurrency: { name: 'USDC', symbol: 'USDC', decimals: 18 },
-                        blockExplorerUrls: ['https://testnet.arcscan.app'],
+                        blockExplorerUrls: [import.meta.env.VITE_EXPLORER_URL],
                     }],
                 });
             } catch {
-                // Chain exists and MetaMask didn't update — just switch to it.
                 try {
                     await connector.provider.request({
                         method: 'wallet_switchEthereumChain',
                         params: [{ chainId: '0x4CEF52' }],
                     });
-                } catch { /* already on chain or user rejected */ }
+                } catch { /* already on chain */ }
             }
 
             const gasPriceHex = await arcSend('eth_gasPrice', []);
-            const txOverrides = { gasPrice: BigInt(gasPriceHex), gasLimit: 200000n };
+            const txOverrides  = { gasPrice: BigInt(gasPriceHex), gasLimit: 200000n };
 
-            const currentAllowance = await usdcRead.allowance(walletAddress, WRAPPER_ADDRESS);
+            const currentAllowance = await readAllowance(cfg.stablecoin, walletAddress, cfg.wrapper);
             if (currentAllowance < parsedAmount) {
-                setStatus("approving");
-                const usdcWrite = new ethers.Contract(USDC_ADDRESS, ERC20_ABI, signer);
-                const approveTx = await usdcWrite.approve(WRAPPER_ADDRESS, parsedAmount, txOverrides);
+                setStatus('approving');
+                const stableWrite = new ethers.Contract(cfg.stablecoin, ERC20_ABI, signer);
+                const approveTx   = await stableWrite.approve(cfg.wrapper, parsedAmount, txOverrides);
                 await approveTx.wait();
             }
 
-            setStatus("wrapping");
-            const wrapper = new ethers.Contract(WRAPPER_ADDRESS, WRAPPER_ABI, signer);
+            setStatus('wrapping');
+            const wrapper   = new ethers.Contract(cfg.wrapper, WRAPPER_ABI, signer);
             const depositTx = await wrapper.deposit(parsedAmount, txOverrides);
-            const receipt = await depositTx.wait();
+            const receipt   = await depositTx.wait();
 
             setTxHash(receipt.hash);
-            setStatus("success");
-            setAmount("");
-
+            setStatus('success');
+            setAmount('');
             if (onSuccess) onSuccess();
         } catch (err) {
-            setError(err.reason || err.shortMessage || err.message || "Transaction failed");
-            setStatus("error");
+            setError(err.reason || err.shortMessage || err.message || 'Transaction failed');
+            setStatus('error');
         } finally {
             setLoading(false);
         }
@@ -140,19 +161,24 @@ const WrapComponent = ({ connector, walletAddress, onClose, onSuccess }) => {
         <Overlay>
             <Card>
                 <CardHeader>
-                    <CardTitle>Wrap USDC</CardTitle>
-                    {onClose && (
-                        <CloseBtn onClick={onClose}>
-                            <X size={18} />
-                        </CloseBtn>
-                    )}
+                    <CardTitle>Wrap</CardTitle>
+                    {onClose && <CloseBtn onClick={onClose}><X size={18} /></CloseBtn>}
                 </CardHeader>
+
+                <PairToggle>
+                    <PairOpt $active={pair === 'USD'} onClick={() => switchPair('USD')} disabled={loading}>
+                        USDC
+                    </PairOpt>
+                    <PairOpt $active={pair === 'EUR'} onClick={() => switchPair('EUR')} disabled={loading}>
+                        EURC
+                    </PairOpt>
+                </PairToggle>
 
                 <TokenBox>
                     <TokenLabel>
                         <span>You pay</span>
                         <BalanceText onClick={handleMax}>
-                            Balance: {formatDisplay(usdcBalance)}
+                            Balance: {formatDisplay(stableBalance)}
                         </BalanceText>
                     </TokenLabel>
                     <TokenRow>
@@ -160,37 +186,33 @@ const WrapComponent = ({ connector, walletAddress, onClose, onSuccess }) => {
                             type="number"
                             placeholder="0.00"
                             value={amount}
-                            onChange={(e) => { setAmount(e.target.value); setError(""); }}
+                            onChange={(e) => { setAmount(e.target.value); setError(''); }}
                             disabled={loading}
                         />
-                        <TokenBadge>USDC</TokenBadge>
+                        <TokenBadge>{cfg.stableLabel}</TokenBadge>
                     </TokenRow>
                 </TokenBox>
 
                 <ArrowWrap>
-                    <ArrowCircle>
-                        <ArrowDown size={16} />
-                    </ArrowCircle>
+                    <ArrowCircle><ArrowDown size={16} /></ArrowCircle>
                 </ArrowWrap>
 
                 <TokenBox>
                     <TokenLabel>
                         <span>You receive</span>
-                        <BalanceText>
-                            Balance: {formatDisplay(tapusdcBalance)}
-                        </BalanceText>
+                        <BalanceText>Balance: {formatDisplay(tapBalance)}</BalanceText>
                     </TokenLabel>
                     <TokenRow>
                         <AmountDisplay>
-                            {amount && parseFloat(amount) > 0 ? formatDisplay(amount) : "0.00"}
+                            {amount && parseFloat(amount) > 0 ? formatDisplay(amount) : '0.00'}
                         </AmountDisplay>
-                        <TokenBadge $accent>TAPUSDC</TokenBadge>
+                        <TokenBadge $accent>{cfg.tapLabel}</TokenBadge>
                     </TokenRow>
                 </TokenBox>
 
                 <InfoRow>
                     <InfoLabel>Rate</InfoLabel>
-                    <InfoValue>1 USDC = 1 TAPUSDC</InfoValue>
+                    <InfoValue>{cfg.rate}</InfoValue>
                 </InfoRow>
                 <InfoRow>
                     <InfoLabel>Fee</InfoLabel>
@@ -202,24 +224,21 @@ const WrapComponent = ({ connector, walletAddress, onClose, onSuccess }) => {
                 </InfoRow>
 
                 {error && (
-                    <ErrorBox>
-                        <AlertCircle size={14} />
-                        <span>{error}</span>
-                    </ErrorBox>
+                    <ErrorBox><AlertCircle size={14} /><span>{error}</span></ErrorBox>
                 )}
 
-                {status === "success" && (
+                {status === 'success' && (
                     <SuccessBox>
                         <Check size={14} />
                         <span>
                             Wrapped successfully
                             {txHash && (
                                 <TxLink
-                                    href={`https://testnet.arcscan.app/tx/${txHash}`}
+                                    href={`${import.meta.env.VITE_EXPLORER_URL}/tx/${txHash}`}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                 >
-                                    {" "}View tx
+                                    {' '}View tx
                                 </TxLink>
                             )}
                         </span>
@@ -227,26 +246,30 @@ const WrapComponent = ({ connector, walletAddress, onClose, onSuccess }) => {
                 )}
 
                 <WrapBtn onClick={handleWrap} disabled={loading || !amount || parseFloat(amount) <= 0}>
-                    {status === "approving" && <><Spinner /> Approving USDC...</>}
-                    {status === "wrapping" && <><Spinner /> Wrapping...</>}
-                    {status === "success" && <>Wrap again</>}
-                    {status === "error" && <>Try again</>}
-                    {!status && <>Wrap USDC</>}
+                    {status === 'approving' && <><Spinner /> Approving {cfg.stableLabel}…</>}
+                    {status === 'wrapping'  && <><Spinner /> Wrapping…</>}
+                    {status === 'success'   && <>Wrap again</>}
+                    {status === 'error'     && <>Try again</>}
+                    {!status               && <>Wrap {cfg.stableLabel}</>}
                 </WrapBtn>
 
                 <Disclaimer>
-                    USDC is locked 1:1 in the wrapper contract. You can unwrap at any time.
+                    {cfg.stableLabel} is locked 1:1 in the wrapper contract. You can unwrap at any time.
                 </Disclaimer>
             </Card>
         </Overlay>
     );
 };
 
+// Animations
+
 const fadeIn = keyframes`
     from { opacity: 0; transform: translateY(8px); }
     to   { opacity: 1; transform: translateY(0); }
 `;
 const spin = keyframes`to { transform: rotate(360deg); }`;
+
+// Layout
 
 const Overlay = styled.div`
     position: fixed;
@@ -262,6 +285,7 @@ const Overlay = styled.div`
     @media (max-width: 768px) {
         align-items: flex-start;
         padding: 16px;
+        overflow-y: auto;
     }
 `;
 
@@ -280,7 +304,7 @@ const CardHeader = styled.div`
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 20px;
+    margin-bottom: 16px;
 `;
 
 const CardTitle = styled.h3`
@@ -301,9 +325,53 @@ const CloseBtn = styled.button`
     display: grid;
     place-items: center;
     cursor: pointer;
-    transition: border-color 0.2s ease, color 0.2s ease;
-    &:hover { border-color: rgba(9, 0, 34, 0.25); color: #090022; }
+    transition: opacity 0.15s;
+    &:hover { opacity: 0.7; }
 `;
+
+// Pair toggle
+
+const PairToggle = styled.div`
+    display: flex;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 10px;
+    padding: 3px;
+    gap: 3px;
+    margin-bottom: 16px;
+`;
+
+const PairOpt = styled.button`
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 8px 12px;
+    border: none;
+    border-radius: 8px;
+    font-family: 'Google Sans Flex', 'Sora', sans-serif;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.2px;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+    background: ${p => p.$active ? 'rgba(255,255,255,0.1)' : 'transparent'};
+    color: ${p => p.$active ? '#ffffff' : 'rgba(255,255,255,0.35)'};
+    &:hover:not(:disabled) { color: ${p => p.$active ? '#ffffff' : 'rgba(255,255,255,0.65)'}; }
+    &:disabled { cursor: default; }
+`;
+
+const PairDot = styled.span`
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    background: ${p => p.$active ? '#4F55F1' : 'rgba(255,255,255,0.15)'};
+    transition: background 0.15s;
+`;
+
+// Token boxes
 
 const TokenBox = styled.div`
     background: rgba(255, 255, 255, 0.05);
@@ -319,7 +387,7 @@ const TokenLabel = styled.div`
     margin-bottom: 10px;
     font-size: 12px;
     color: #8D969E;
-    font-family: Google Sans Flex, Sans serif;
+    font-family: 'Google Sans Flex', sans-serif;
     font-weight: 500;
 `;
 
@@ -346,15 +414,10 @@ const AmountInput = styled.input`
     font-weight: 800;
     color: #fff;
     min-width: 0;
-
     &::placeholder { color: #8D969E50; }
     &:disabled { opacity: 0.5; }
-
     &::-webkit-inner-spin-button,
-    &::-webkit-outer-spin-button {
-        -webkit-appearance: none;
-        margin: 0;
-    }
+    &::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
     -moz-appearance: textfield;
 `;
 
@@ -369,8 +432,8 @@ const AmountDisplay = styled.span`
 const TokenBadge = styled.span`
     font-size: 13px;
     font-weight: 700;
-    color: ${p => p.$accent ? '#fff' : '#fff'};
-    background: ${p => p.$accent ? '#4F55F1' : '#4F55F1'};
+    color: #fff;
+    background: #4F55F1;
     border-radius: 8px;
     padding: 6px 12px;
     white-space: nowrap;
@@ -395,6 +458,8 @@ const ArrowCircle = styled.div`
     place-items: center;
 `;
 
+// Info rows
+
 const InfoRow = styled.div`
     display: flex;
     align-items: center;
@@ -415,6 +480,8 @@ const InfoValue = styled.span`
     font-weight: 800;
     color: #fff;
 `;
+
+// Feedback
 
 const ErrorBox = styled.div`
     display: flex;
@@ -466,11 +533,7 @@ const WrapBtn = styled.button`
     cursor: pointer;
     margin-top: 16px;
     transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
-
-    &:hover:not(:disabled) {
-        transform: translateY(-1px);
-        box-shadow: 0 6px 20px rgba(9, 0, 34, 0.15);
-    }
+    &:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(9, 0, 34, 0.15); }
     &:disabled { opacity: 0.5; cursor: not-allowed; }
 `;
 
@@ -485,7 +548,7 @@ const Spinner = styled.div`
 
 const Disclaimer = styled.p`
     font-size: 11px;
-    color: #0f0f1180;
+    color: #8D969E80;
     text-align: center;
     margin: 12px 0 0;
     line-height: 1.5;

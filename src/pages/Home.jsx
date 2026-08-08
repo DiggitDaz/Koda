@@ -20,6 +20,7 @@ import EU from 'country-flag-icons/react/1x1/EU';
 import JP from 'country-flag-icons/react/1x1/JP';
 import SG from 'country-flag-icons/react/1x1/SG';
 import AU from 'country-flag-icons/react/1x1/AU';
+import HeroSection from '../components/HeroSection.jsx';
 
 // UI Mockups (CSS-art)
 
@@ -193,12 +194,12 @@ const STEP_CONFIGS = [
 ];
 
 const FEATURES = [
-    { icon: Lock,       title: 'Self-custody',         body: 'Your private keys never leave your device. Koda settles on-chain and releases custody the moment a payment clears.',      gradient: '#233f00',   light: false },
-    { icon: CreditCard, title: 'Virtual Visa card',    body: 'A real Visa card issued to you — accepted anywhere Visa is taken, online or in-app, worldwide.',                          gradient: '#0f0f1130', light: true  },
-    { icon: Zap,        title: 'Real-time settlement', body: 'TAPUSDC is locked for seconds while your payment clears, then released atomically. No overnight holds, ever.',            gradient: '#ffffff',   light: true  },
-    { icon: Shield,     title: 'Compliance built in',  body: 'Every wallet is screened at connection. Sanctioned addresses are blocked at the contract level — not just the UI.',       gradient: '#233f00',   light: false },
-    { icon: RefreshCw,  title: '1:1 USDC backed',      body: 'Every TAPUSDC is redeemable for exactly one USDC from the wrapper contract reserves at any time. No algorithmic risk.',  gradient: '#0f0f1130', light: true  },
-    { icon: Globe,      title: 'Built on Arc',          body: 'Powered by Circle\'s Arc Testnet — a payments-native blockchain built from the ground up for USDC settlement at scale.', gradient: '#ffffff',   light: true  },
+    { icon: Lock,       title: 'Self-custody',         body: 'Your private keys never leave your device. Koda settles on-chain and releases custody the moment a payment clears.',      gradient: 'linear-gradient(45deg, #ffffff05 40%, #121212)',               light: false },
+    { icon: CreditCard, title: 'Virtual Visa card',    body: 'A real Visa card issued to you — accepted anywhere Visa is taken, online or in-app, worldwide.',                          gradient: '#000000', light: true  },
+    { icon: Zap,        title: 'Real-time settlement', body: 'TAPUSDC is locked for seconds while your payment clears, then released atomically. No overnight holds, ever.',            gradient: 'linear-gradient(45deg, #ffffff05 40%, rgba(255,31,142,0.15), rgba(255,107,0,0.15), rgba(255,204,0,0.15), rgba(0,200,150,0.15), rgba(79,85,241,0.15))', light: false },
+    { icon: Shield,     title: 'Compliance built in',  body: 'Every wallet is screened at connection. Sanctioned addresses are blocked at the contract level — not just the UI.',       gradient: '#000000',               light: false },
+    { icon: RefreshCw,  title: '1:1 USDC backed',      body: 'Every TAPUSDC is redeemable for exactly one USDC from the wrapper contract reserves at any time. No algorithmic risk.',  gradient: 'linear-gradient(45deg, #ffffff05 40%, rgba(255,31,142,0.15), rgba(255,107,0,0.15), rgba(255,204,0,0.15), rgba(0,200,150,0.15), rgba(79,85,241,0.15))', light: false },
+    { icon: Globe,      title: 'Built on Arc',          body: 'Powered by Circle\'s Arc Testnet — a payments-native blockchain built from the ground up for USDC settlement at scale.', gradient: 'linear-gradient(45deg, #ffffff05 40%, #121212)', light: true  },
 ];
 
 // Abstract shape
@@ -268,8 +269,10 @@ const Home = () => {
                         <NavA href="#features">Features</NavA>
                         <NavA href="https://kodafi.xyz" target="_blank" rel="noopener noreferrer">About</NavA>
                         <NavA href="https://sprightly-biscotti-145919.netlify.app/" target="_blank" rel="noopener noreferrer">Docs</NavA>
+                        <NavA href="https://docs.google.com/document/d/1opzLM-UVdaP19rc3792PXGeb3jd6pV82/edit?usp=drive_link&ouid=111428994564740713329&rtpof=true&sd=true" target="_blank" rel="noopener noreferrer">Litepaper</NavA>
                     </NavLinks>
                     <NavRight>
+                        <NavBusiness onClick={() => navigate('/business')}>Business</NavBusiness>
                         {!user && <NavSignIn onClick={() => navigate('/login')}>Sign in</NavSignIn>}
                         <NavCta onClick={() => navigate(user ? '/dashboard' : '/signup')}>
                             {user ? 'Open app' : 'Get started'}
@@ -287,6 +290,7 @@ const Home = () => {
                         <MobileMenuLink href="#features" onClick={() => setMenuOpen(false)}>Features</MobileMenuLink>
                         <MobileMenuLink href="https://kodafi.xyz" target="_blank" rel="noopener noreferrer" onClick={() => setMenuOpen(false)}>About</MobileMenuLink>
                         <MobileMenuLink href="https://sprightly-biscotti-145919.netlify.app/" target="_blank" rel="noopener noreferrer" onClick={() => setMenuOpen(false)}>Docs</MobileMenuLink>
+                        <MobileMenuLink href="https://docs.google.com/document/d/1opzLM-UVdaP19rc3792PXGeb3jd6pV82/edit?usp=drive_link&ouid=111428994564740713329&rtpof=true&sd=true" target="_blank" rel="noopener noreferrer" onClick={() => setMenuOpen(false)}>Litepaper</MobileMenuLink>
                         <MobileMenuActions>
                             {!user && (
                                 <MobileMenuSignIn onClick={() => { setMenuOpen(false); navigate('/login'); }}>Sign in</MobileMenuSignIn>
@@ -298,53 +302,33 @@ const Home = () => {
                     </MobileMenu>
                 )}
             </Nav>
-
-            {/* Hero */}
-            <Hero>
-                <HeroInner>
-                    <HeroLeft>
-                        <HeroTitle>Spend USDC from your <span>own wallet, anywhere.</span></HeroTitle>
-                        <HeroDesc>No custodian, no compromise. Your virtual Visa card settles directly on-chain.</HeroDesc>
-                        <HeroArrowLink onClick={() => navigate(user ? '/dashboard' : '/signup')}>
-                            <HeroArrowCircle><ArrowRight size={16} /></HeroArrowCircle>
-                            {user ? 'Open dashboard' : 'Try it free'}
-                        </HeroArrowLink>
-                    </HeroLeft>
-                    <HeroRightPanel>
-                        <SpendingMockup />
-                    </HeroRightPanel>
-                </HeroInner>
-            </Hero>
+                
+            <HeroSection />
 
               {/* Features */}
             <FeaturesSection id="features">
-                <FeaturesLayout>
-                    <FeaturesLeft>
-                        <FeaturesHeading>Built for<br />self-custody,<br />end to end.</FeaturesHeading>
-                        <FeaturesSub>
-                            Every decision, from the smart contract design to the card issuing rails, is made with one principle: you own your funds at every step.
-                        </FeaturesSub>
-                        <FeatCta onClick={() => navigate(user ? '/dashboard' : '/signup')}>
-                            <ArrowCircle><ArrowRight size={14} /></ArrowCircle>
-                            {user ? 'Open dashboard' : 'Create your card'}
-                        </FeatCta>
-                    </FeaturesLeft>
-
-                    <FeaturesRight>
-                        <FeaturesGrid>
-                            {FEATURES.map(({ icon: Icon, title, body, gradient, light }) => (
-                                <FeatCard key={title} style={{ background: gradient }} $light={light}>
-                                    <FeatDots $light={light} />
-                                    <FeatIconWrap $light={light}>
-                                        <Icon size={20} />
-                                    </FeatIconWrap>
-                                    <FeatTitle $light={light}>{title}</FeatTitle>
-                                    <FeatBody $light={light}>{body}</FeatBody>
-                                </FeatCard>
-                            ))}
-                        </FeaturesGrid>
-                    </FeaturesRight>
-                </FeaturesLayout>
+                <FeaturesHeader>
+                    <FeaturesHeading>Built for self-custody, end to end.</FeaturesHeading>
+                    <FeaturesSub>
+                        Every decision, from the smart contract design to the card issuing rails, is made with one principle: you own your funds at every step.
+                    </FeaturesSub>
+                    <FeatCta onClick={() => navigate(user ? '/dashboard' : '/signup')}>
+                        <ArrowCircle><ArrowRight size={14} /></ArrowCircle>
+                        {user ? 'Open dashboard' : 'Create your card'}
+                    </FeatCta>
+                </FeaturesHeader>
+                <FeaturesGrid>
+                    {FEATURES.map(({ icon: Icon, title, body, gradient, light }) => (
+                        <FeatCard key={title} style={{ background: gradient }} $light={light}>
+                            <FeatDots $light={light} />
+                            <FeatIconWrap $light={light}>
+                                <Icon size={20} />
+                            </FeatIconWrap>
+                            <FeatTitle $light={light}>{title}</FeatTitle>
+                            <FeatBody $light={light}>{body}</FeatBody>
+                        </FeatCard>
+                    ))}
+                </FeaturesGrid>
             </FeaturesSection>
 
 
@@ -509,10 +493,10 @@ const fadeUp = keyframes`from{opacity:0;transform:translateY(20px)}to{opacity:1;
 // Page
 const Page = styled.div`
     min-height: 100vh;
-    background: #ffffff;
+    background: #000000;
     font-family: 'Sora', sans-serif;
     overflow-x: hidden;
-    color: #06001A;
+    color: #ffffff;
 `;
 
 // Nav
@@ -555,8 +539,8 @@ const Nav = styled.nav`
     position: sticky;
     top: 0;
     z-index: 100;
-    background: #ffffff;
-    border-bottom: 1px solid rgba(15,15,17,0.07);
+    background: #000000;
+    border-bottom: 1px solid rgba(255,255,255,0.07);
 `;
 
 const NavInner = styled.div`
@@ -580,7 +564,7 @@ const Logo = styled.a`
 const LogoImg = styled.img`width: 34px; height: 34px;`;
 const LogoText = styled.span`
     font-family: 'Saira', sans-serif;
-    font-size: 22px; font-weight: 800; color: #0f0f11; letter-spacing: -0.5px;
+    font-size: 22px; font-weight: 800; color: #ffffff; letter-spacing: -0.5px;
 `;
 
 const NavLinks = styled.div`
@@ -588,32 +572,40 @@ const NavLinks = styled.div`
     @media(max-width:680px) { display: none; }
 `;
 const NavA = styled.a`
-    font-size: 15px; font-weight: 500; color: #0f0f1170;
+    font-size: 15px; font-weight: 500; color: rgba(255,255,255,0.45);
     text-decoration: none; padding: 10px 16px; border-radius: 8px;
     font-family: 'Google Sans Flex', sans-serif;
     transition: color 0.2s, background 0.2s; white-space: nowrap;
-    &:hover { color: #0f0f11; background: rgba(15,15,17,0.05); }
+    &:hover { color: #ffffff; background: rgba(255,255,255,0.06); }
 `;
 const NavRight = styled.div`
     display: flex; align-items: center; gap: 10px; margin-left: 20px; flex-shrink: 0;
     @media(max-width:768px) { display: none; }
 `;
-const NavSignIn = styled.button`
-    font-size: 14px; font-weight: 600; color: #0f0f11;
-    background: none; border: 1.5px solid rgba(15,15,17,0.18);
+const NavBusiness = styled.button`
+    font-size: 14px; font-weight: 600; color: rgba(255,255,255,0.7);
+    background: none; border: 1.5px solid rgba(255,255,255,0.14);
     border-radius: 8px; padding: 10px 20px;
     font-family: 'Google Sans Flex', sans-serif; cursor: pointer;
-    transition: border-color 0.2s, background 0.2s;
-    &:hover { border-color: rgba(15,15,17,0.4); background: rgba(15,15,17,0.04); }
+    transition: border-color 0.2s, color 0.2s, background 0.2s;
+    &:hover { border-color: rgba(255,255,255,0.35); color: #fff; background: rgba(255,255,255,0.05); }
+`;
+const NavSignIn = styled.button`
+    font-size: 14px; font-weight: 600; color: rgba(255,255,255,0.7);
+    background: none; border: 1.5px solid rgba(255,255,255,0.14);
+    border-radius: 8px; padding: 10px 20px;
+    font-family: 'Google Sans Flex', sans-serif; cursor: pointer;
+    transition: border-color 0.2s, color 0.2s, background 0.2s;
+    &:hover { border-color: rgba(255,255,255,0.35); color: #fff; background: rgba(255,255,255,0.05); }
 `;
 const NavCta = styled.button`
     padding: 10px 22px;
-    background: #233f00; color: #fff;
+    background: #4F55F1; color: #fff;
     border: none; border-radius: 8px;
     font-family: 'Google Sans Flex', sans-serif; font-size: 14px; font-weight: 700;
     cursor: pointer; white-space: nowrap;
-    transition: opacity 0.2s, transform 0.15s;
-    &:hover { opacity: 0.82; transform: translateY(-1px); }
+    transition: opacity 0.2s, transform 0.15s, box-shadow 0.15s;
+    &:hover { opacity: 0.88; transform: translateY(-1px); box-shadow: 0 4px 16px rgba(79,85,241,0.35); }
 `;
 
 // Mobile nav
@@ -631,7 +623,7 @@ const HamburgerBtn = styled.button`
     width: 40px;
     height: 40px;
     background: none;
-    border: 1px solid rgba(15,15,17,0.15);
+    border: 1px solid rgba(255,255,255,0.15);
     border-radius: 9px;
     cursor: pointer;
     padding: 0;
@@ -645,7 +637,7 @@ const HamLine = styled.span`
     display: block;
     width: 18px;
     height: 2px;
-    background: #0f0f11;
+    background: #ffffff;
     border-radius: 2px;
     transition: transform 0.22s ease, opacity 0.22s ease;
 
@@ -657,50 +649,56 @@ const HamLine = styled.span`
 const MobileMenu = styled.div`
     display: none;
     flex-direction: column;
-    padding: 8px 20px 24px;
-    background: #ffffff;
-    border-top: 1px solid rgba(15,15,17,0.07);
+    background: #000000;
+    border-top: 1.5px solid rgba(79,85,241,0.4);
     animation: ${mobileMenuSlide} 0.2s ease both;
+    padding: 4px 0 32px;
 
     @media(max-width:768px) { display: flex; }
 `;
 
 const MobileMenuLink = styled.a`
     font-family: 'Google Sans Flex', sans-serif;
-    font-size: 17px;
-    font-weight: 500;
-    color: #0f0f1175;
+    font-size: 16px;
+    font-weight: 600;
+    color: rgba(255,255,255,0.5);
     text-decoration: none;
-    padding: 16px 4px;
-    border-bottom: 1px solid rgba(15,15,17,0.06);
-    transition: color 0.15s;
-    &:hover { color: #0f0f11; }
+    padding: 15px 20px;
+    display: flex;
+    align-items: center;
+    border-left: 2px solid transparent;
+    transition: color 0.15s, background 0.15s, border-color 0.15s;
+    &:hover {
+        color: #ffffff;
+        background: rgba(255,255,255,0.04);
+        border-left-color: #4F55F1;
+    }
 `;
 
 const MobileMenuActions = styled.div`
-    display: grid;
-    grid-template-columns: 1fr 1fr;
+    display: flex;
+    flex-direction: column;
     gap: 10px;
-    margin-top: 20px;
+    margin: 20px 20px 0;
 `;
 
 const MobileMenuSignIn = styled.button`
-    padding: 14px;
+    padding: 15px;
     font-family: 'Google Sans Flex', sans-serif;
     font-size: 15px;
     font-weight: 600;
-    color: #0f0f11;
-    background: none;
-    border: 1.5px solid rgba(15,15,17,0.18);
+    color: rgba(255,255,255,0.7);
+    background: rgba(255,255,255,0.04);
+    border: 1.5px solid rgba(255,255,255,0.12);
     border-radius: 10px;
     cursor: pointer;
-    transition: border-color 0.2s, background 0.2s;
-    &:hover { border-color: rgba(15,15,17,0.4); background: rgba(15,15,17,0.04); }
+    transition: border-color 0.2s, color 0.2s, background 0.2s;
+    &:hover { border-color: rgba(255,255,255,0.3); color: #fff; background: rgba(255,255,255,0.08); }
 `;
 
 const MobileMenuCta = styled.button`
-    padding: 14px;
-    background: #233f00;
+    padding: 15px;
+    background: #4F55F1;
     color: #fff;
     border: none;
     border-radius: 10px;
@@ -708,8 +706,8 @@ const MobileMenuCta = styled.button`
     font-size: 15px;
     font-weight: 700;
     cursor: pointer;
-    transition: opacity 0.2s;
-    &:hover { opacity: 0.82; }
+    transition: opacity 0.2s, box-shadow 0.2s;
+    &:hover { opacity: 0.88; box-shadow: 0 4px 20px rgba(79,85,241,0.45); }
 `;
 
 // Hero
@@ -1064,7 +1062,7 @@ const PreCardsRow = styled.div`
     width: 80%;
     margin: 0 auto;
     height: 100px;
-    background-color: #e2e2e2;
+    background-color: #000000;
     grid-template-columns: 1fr 1fr;
     @media(min-width: 768px) { display: none; } 
     @media(max-width: 768px) {
@@ -1079,7 +1077,7 @@ const PreCardsRow = styled.div`
 `;
 const PreCardsLeft  = styled.div`
     position: relative;
-    @media(max-width: 768px) { border-bottom-right-radius: 24px; background-color: #ffffff; }`;
+    @media(max-width: 768px) { border-bottom-right-radius: 24px; background-color: #000000; }`;
 
 const PreCardsLeftBg = styled.div`
     position: absolute;
@@ -1090,7 +1088,7 @@ const PreCardsLeftBg = styled.div`
     z-index: -1;
 `;
 const PreCardsRight = styled.div`
-    background: #e2e2e2;
+    background: #000000;
     @media(max-width: 768px) { border-top-right-radius: 24px; border-top-left-radius: 24px; }
 `
 // Cards section
@@ -1102,14 +1100,14 @@ const CardsSection = styled.section`
     margin: 0 auto;
     padding: 100px 0px;
     border-radius: 45px;
-    background-color: #e2e2e2;
+    background-color: #000000;
     background-image:
-        radial-gradient(circle at 50% 50%, #b0b0b0 0%,  #b0b0b0 12%, transparent 12%),
-        radial-gradient(circle at 50% 50%, #b8b8b8 0%,  #b8b8b8 22%, transparent 22%),
-        radial-gradient(circle at 50% 50%, #c2c2c2 0%,  #c2c2c2 33%, transparent 33%),
-        radial-gradient(circle at 50% 50%, #cccccc 0%,  #cccccc 45%, transparent 45%),
-        radial-gradient(circle at 50% 50%, #d4d4d4 0%,  #d4d4d4 58%, transparent 58%),
-        radial-gradient(circle at 50% 50%, #dadada 0%,  #dadada 72%, transparent 72%);
+        radial-gradient(circle at 50% 50%, rgba(255,255,255,0.025) 0%, rgba(255,255,255,0.025) 12%, transparent 12%),
+        radial-gradient(circle at 50% 50%, rgba(255,255,255,0.02)  0%, rgba(255,255,255,0.02)  22%, transparent 22%),
+        radial-gradient(circle at 50% 50%, rgba(255,255,255,0.015) 0%, rgba(255,255,255,0.015) 33%, transparent 33%),
+        radial-gradient(circle at 50% 50%, rgba(255,255,255,0.01)  0%, rgba(255,255,255,0.01)  45%, transparent 45%),
+        radial-gradient(circle at 50% 50%, rgba(255,255,255,0.008) 0%, rgba(255,255,255,0.008) 58%, transparent 58%),
+        radial-gradient(circle at 50% 50%, rgba(255,255,255,0.005) 0%, rgba(255,255,255,0.005) 72%, transparent 72%);
 
     @media(max-width:768px) {
         padding: 40px 24px 60px;
@@ -1125,7 +1123,7 @@ const CardSectionTitle = styled.h3`
     font-family: Saira, Sans serif;
     font-weight: 800;
     font-size: clamp(32px, 6vw, 56px);
-    color: #06001A;
+    color: #ffffff;
     text-align: center;
     margin-top: 0;
     padding: 0 16px;
@@ -1164,23 +1162,23 @@ const CardVisualBg = styled.div`
 
 const CardInfo = styled.div`padding: 0 4px;`;
 const CardTitle = styled.h3`
-    font-size: 26px; font-family: 'Saira', Sans serif; font-weight: 800; color: #06001A; margin: 0 0 10px; letter-spacing: -0.5px;
+    font-size: 26px; font-family: 'Saira', Sans serif; font-weight: 800; color: #ffffff; margin: 0 0 10px; letter-spacing: -0.5px;
     @media(max-width:768px) { font-size: 20px; }
 `;
 const CardBody = styled.p`
-    font-size: 16px; font-family: 'Google Sans Flex', Sans serif; color: #06001A80; line-height: 1.7; margin: 0 0 16px;
+    font-size: 16px; font-family: 'Google Sans Flex', Sans serif; color: rgba(255,255,255,0.5); line-height: 1.7; margin: 0 0 16px;
     @media(max-width:768px) { font-size: 14px; }
 `;
 const CardLink = styled.button`
     display: flex; align-items: center; gap: 10px;
     background: none; border: none; padding: 0;
     font-family: 'Google Sans Flex', sans-serif; font-size: 16px; font-weight: 700;
-    color: #06001A; cursor: pointer; transition: gap 0.2s;
+    color: #ffffff; cursor: pointer; transition: gap 0.2s;
     &:hover{gap:14px;}
 `;
 const ArrowCircle = styled.div`
     width: 32px; height: 32px; border-radius: 50%;
-    background: #233f00;
+    background: #4F55F1;
     color: #fff;
     display: grid; place-items: center; flex-shrink: 0;
     transition: background 0.2s, border-color 0.2s;
@@ -1240,20 +1238,20 @@ const StepsHeader = styled.div`
 `;
 const SectionEyebrow = styled.p`
     font-size:11px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;
-    color:rgba(6,0,26,0.4);margin:0 0 12px;
+    color:rgba(255,255,255,0.35);margin:0 0 12px;
     font-family: 'Google Sans Flex', sans-serif;
 `;
 const SectionHeading = styled.h2`
     font-size: clamp(28px, 4vw, 56px);
     font-weight: 800;
     font-family: 'Saira', sans-serif;
-    color: #06001A;
+    color: #ffffff;
     line-height: 1.1;
     margin: 0 0 12px;
 `;
 const SectionSub = styled.p`
     font-size: 18px;
-    color: rgba(6,0,26,0.5);
+    color: rgba(255,255,255,0.5);
     line-height: 1.5;
     font-family: 'Google Sans Flex', sans-serif;
     max-width: 520px;
@@ -1289,8 +1287,8 @@ const StepVisualCard = styled.div`
     overflow: hidden;
     height: 380px;
     box-shadow:
-        0 24px 60px rgba(6,0,26,0.18),
-        0 6px 20px rgba(6,0,26,0.1);
+        0 24px 60px rgba(0,0,0,0.5),
+        0 6px 20px rgba(0,0,0,0.3);
     @media(max-width:768px){height:260px;}
 `;
 const StepImage = styled.img`
@@ -1345,7 +1343,7 @@ const StepLearnArrow = styled.div`
     width: 28px;
     height: 28px;
     border-radius: 50%;
-    background: #233f00;
+    background: #4F55F1;
     display: grid;
     place-items: center;
     flex-shrink: 0;
@@ -1363,7 +1361,7 @@ const StepWatermark = styled.div`
     font-family: 'Saira', sans-serif;
     font-size: 140px;
     font-weight: 900;
-    color: rgba(6,0,26,0.08);
+    color: rgba(255,255,255,0.04);
     line-height: 1;
     letter-spacing: -8px;
     position: absolute;
@@ -1377,7 +1375,7 @@ const StepBadge = styled.div`
     display: inline-flex;
     align-items: center;
     padding: 5px 14px;
-    background: #233f00;
+    background: #4F55F1;
     color: #fff;
     border-radius: 100px;
     font-family: 'Saira', sans-serif;
@@ -1391,7 +1389,7 @@ const StepTitle = styled.h3`
     font-family: 'Saira', sans-serif;
     font-size: clamp(22px, 2.5vw, 32px);
     font-weight: 700;
-    color: #06001A;
+    color: #ffffff;
     margin: 0 0 14px;
     letter-spacing: -0.5px;
     line-height: 1.2;
@@ -1400,7 +1398,7 @@ const StepTitle = styled.h3`
 const StepBody = styled.p`
     font-family: 'Google Sans Flex', sans-serif;
     font-size: 16px;
-    color: rgba(6,0,26,0.55);
+    color: rgba(255,255,255,0.5);
     line-height: 1.7;
     margin: 0;
     position: relative;
@@ -1466,38 +1464,31 @@ const FeaturesSection = styled.section`
     padding: 100px 40px 120px;
     @media(max-width:768px) { padding: 64px 24px 80px; }
 `;
-const FeaturesLayout = styled.div`
+const FeaturesHeader = styled.div`
     max-width: 1200px;
-    margin: 0 auto;
-    display: grid;
-    grid-template-columns: 380px 1fr;
-    gap: 80px;
-    align-items: start;
-
-    @media(max-width:1024px) { grid-template-columns: 320px 1fr; gap: 48px; }
-    @media(max-width:820px)  { grid-template-columns: 1fr; gap: 48px; }
-`;
-const FeaturesLeft = styled.div`
-    position: sticky;
-    top: 100px;
-
-    @media(max-width:820px) { position: static; }
+    margin: 0 auto 56px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
 `;
 const FeaturesHeading = styled.h2`
     font-size: clamp(30px, 4vw, 48px);
     font-weight: 800;
     font-family: Saira, Sans serif;
-    color: #06001A;
+    color: #ffffff;
     letter-spacing: -1.5px;
     line-height: 1.1;
-    margin: 0 0 20px;
+    margin: 0 0 16px;
+    max-width: 720px;
 `;
 const FeaturesSub = styled.p`
     font-size: 18px;
     font-family: Google Sans Flex, Sans serif;
-    color: #06001A80;
-    line-height: 1.3;
-    margin: 0 0 32px;
+    color: rgba(255,255,255,0.5);
+    line-height: 1.5;
+    margin: 0 0 28px;
+    max-width: 560px;
 `;
 const FeatCta = styled.button`
     display: flex;
@@ -1509,18 +1500,20 @@ const FeatCta = styled.button`
     font-family: 'Google Sans Flex', sans-serif;
     font-size: 16px;
     font-weight: 700;
-    color: #06001A;
+    color: #ffffff;
     cursor: pointer;
     transition: gap 0.2s;
     &:hover { gap: 16px; }
     &:hover ${ArrowCircle} { opacity: 0.6 }
 `;
-const FeaturesRight = styled.div``;
 const FeaturesGrid = styled.div`
+    max-width: 1200px;
+    margin: 0 auto;
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(3, 1fr);
     gap: 16px;
 
+    @media(max-width:900px) { grid-template-columns: repeat(2, 1fr); }
     @media(max-width:560px) { grid-template-columns: 1fr; gap: 12px; }
 `;
 const FeatCard = styled.div`
@@ -1528,16 +1521,16 @@ const FeatCard = styled.div`
     overflow: hidden;
     border-radius: 20px;
     padding: 28px;
-    border: ${p => p.$light ? '1px solid rgba(15,15,17,0.08)' : 'none'};
+    border: 1px solid #ffffff20;
     box-shadow: ${p => p.$light
-        ? '0 4px 20px rgba(6,0,26,0.06), 0 1px 4px rgba(6,0,26,0.04)'
-        : '0 20px 48px rgba(6,0,26,0.18), 0 4px 16px rgba(6,0,26,0.1)'};
+        ? '0 4px 20px rgba(0,0,0,0.3), 0 1px 4px rgba(0,0,0,0.2)'
+        : '0 20px 48px rgba(0,0,0,0.4), 0 4px 16px rgba(0,0,0,0.25)'};
     transition: transform 0.25s, box-shadow 0.25s;
     &:hover {
         transform: translateY(-6px);
         box-shadow: ${p => p.$light
-            ? '0 12px 36px rgba(6,0,26,0.1), 0 4px 12px rgba(6,0,26,0.06)'
-            : '0 32px 64px rgba(6,0,26,0.22), 0 8px 24px rgba(6,0,26,0.12)'};
+            ? '0 12px 36px rgba(0,0,0,0.4), 0 4px 12px rgba(0,0,0,0.25)'
+            : '0 32px 64px rgba(0,0,0,0.5), 0 8px 24px rgba(0,0,0,0.3)'};
     }
     @media(max-width:560px) { padding: 20px; border-radius: 16px; }
 `;
@@ -1545,7 +1538,7 @@ const FeatDots = styled.div`
     position: absolute;
     inset: 0;
     background-image: radial-gradient(
-        ${p => p.$light ? 'rgba(6,0,26,0.06)' : 'rgba(255,255,255,0.07)'} 1px,
+        ${p => p.$light ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.07)'} 1px,
         transparent 1px
     );
     background-size: 24px 24px;
@@ -1555,21 +1548,21 @@ const FeatIconWrap = styled.div`
     position: relative;
     width: 48px; height: 48px;
     border-radius: 14px;
-    background: ${p => p.$light ? 'rgba(15,15,17,0.07)' : 'rgba(255,255,255,0.18)'};
+    background: #ffffff10;
     display: grid; place-items: center;
-    color: ${p => p.$light ? '#0f0f11' : '#fff'};
+    color: #fff;
     margin-bottom: 20px;
 `;
 const FeatTitle = styled.h3`
     position: relative;
     font-size: 16px; font-weight: 800;
-    color: ${p => p.$light ? '#06001A' : '#ffffff'};
+    color: #ffffff;
     margin: 0 0 10px; letter-spacing: -0.3px;
 `;
 const FeatBody = styled.p`
     position: relative;
     font-size: 13px;
-    color: ${p => p.$light ? 'rgba(6,0,26,0.55)' : 'rgba(255,255,255,0.6)'};
+    color: rgba(255,255,255,0.55);
     line-height: 1.7; margin: 0;
 `;
 
@@ -1610,7 +1603,7 @@ const PartnersStaticText = styled.p`
     font-weight: 700;
     letter-spacing: 1.2px;
     text-transform: uppercase;
-    color: rgba(6,0,26,0.35);
+    color: rgba(255,255,255,0.35);
     line-height: 1.5;
     margin: 0;
     white-space: nowrap;
@@ -1620,7 +1613,7 @@ const PartnersStaticText = styled.p`
 const PartnersRule = styled.div`
     width: 1px;
     height: 36px;
-    background: rgba(6,0,26,0.12);
+    background: rgba(255,255,255,0.12);
     margin-left: 24px;
 `;
 
@@ -1659,20 +1652,20 @@ const PartnerSlot = styled.div`
     align-items: center;
     justify-content: center;
     padding: 0 40px;
-    border-right: 1px solid rgba(6,0,26,0.07);
+    border-right: 1px solid rgba(255,255,255,0.07);
     height: 80px;
     flex-shrink: 0;
     transition: background 0.2s;
-    &:hover { background: rgba(255,255,255,0.5); }
+    &:hover { background: rgba(255,255,255,0.05); }
 `;
 
 const PartnerImg = styled.img`
     height: 22px;
     object-fit: contain;
-    opacity: 1;
-    filter: grayscale(100%);
+    opacity: 0.6;
+    filter: grayscale(100%) invert(1);
     transition: opacity 0.2s, filter 0.2s;
-    ${PartnerSlot}:hover & { opacity: 1; filter: none; }
+    ${PartnerSlot}:hover & { opacity: 1; filter: invert(1); }
 `;
 
 const PartnerText = styled.span`
@@ -1705,9 +1698,9 @@ const CtaCard = styled.div`
         0 8px 24px rgba(0,0,0,0.2);
 
     background:
-        radial-gradient(ellipse at 50% 0%, rgba(200,255,80,0.46) 0%, transparent 55%),
-        radial-gradient(ellipse at 85% 110%, rgba(200,255,80,0.16) 0%, transparent 45%),
-        #233f00;
+        radial-gradient(ellipse at 50% 0%, rgba(79,85,241,0.4) 0%, transparent 55%),
+        radial-gradient(ellipse at 85% 110%, rgba(120,60,255,0.2) 0%, transparent 45%),
+        #0a0a14;
 
     @media(max-width:768px) { padding: 56px 32px; border-radius: 20px; }
     @media(max-width:480px) { padding: 40px 20px 36px; border-radius: 16px; }
@@ -1763,6 +1756,7 @@ const CtaSecondaryBtn = styled.a`
     &:hover { background: rgba(255,255,255,0.14); border-color: rgba(255,255,255,0.4); }
     @media(max-width:480px) { width: 100%; text-align: center; padding: 14px; box-sizing: border-box; }
 `;
+
 
 // Footer
 const Footer = styled.footer`

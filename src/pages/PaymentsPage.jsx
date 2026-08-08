@@ -26,7 +26,7 @@ const PaymentsPage = () => {
         setLoading(true);
         setError('');
         try {
-            const res = await axios.get(`https://chainfree.site:7000/card-transactions/${cId}`);
+            const res = await axios.get(`${import.meta.env.VITE_API_URL}/card-transactions/${cId}`);
             if (!res.data.success) { setError('Failed to load transactions.'); return; }
 
             const auths = res.data.stripe_authorizations || [];
@@ -64,7 +64,7 @@ const PaymentsPage = () => {
                 const token = localStorage.getItem('authToken');
                 if (!token) { setLoading(false); return; }
                 try {
-                    const res = await axios.get('https://chainfree.site:7001/user/cards', {
+                    const res = await axios.get(`${import.meta.env.VITE_AUTH_URL}/user/cards`, {
                         headers: { Authorization: `Bearer ${token}` },
                     });
                     if (res.data.success && res.data.data?.length > 0) {
@@ -177,7 +177,7 @@ const PaymentsPage = () => {
                                                 {formatDate(p.date)}
                                                 {p.txHash && (
                                                     <TxLink
-                                                        href={`https://testnet.arcscan.app/tx/${p.txHash}`}
+                                                        href={`${import.meta.env.VITE_EXPLORER_URL}/tx/${p.txHash}`}
                                                         target="_blank"
                                                         rel="noopener noreferrer"
                                                     >

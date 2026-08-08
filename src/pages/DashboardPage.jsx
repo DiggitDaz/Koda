@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import styled, { keyframes, css } from 'styled-components';
 import {
     Eye, EyeOff, ArrowDownLeft, ArrowUpRight,
@@ -15,9 +15,11 @@ import UnwrapComponent from '../components/UnwrapComponent.jsx';
 import BridgeComponent from '../components/BridgeComponent.jsx';
 
 import { arcSend } from '../lib/arcRpc.js';
+import { useTutorial } from '../context/TutorialContext';
 import BalanceHistoryChart, { recordBalanceSnapshot } from '../components/BalanceHistoryChart.jsx';
 
 const TAPUSDC_ADDRESS   = '0xCb96C70be34cd6484e69D1BEd5ad2F22602191e3';
+const TAPEURC_ADDRESS   = '0x36247A653A1253A96a286f5E296c06fF958b1ac0';
 const LIMIT_ABI = [
     'function getAvailableSpendingToday(address account) view returns (uint256)',
     'function dailySpendingLimit(address account) view returns (uint256)',
@@ -27,11 +29,11 @@ const LIMIT_ABI = [
 
 const limitIface   = new ethers.Interface(LIMIT_ABI);
 
-async function rawLimitCall(sig, args = [], retries = 3) {
+async function rawLimitCall(sig, args = [], contractAddr, retries = 3) {
     const data = limitIface.encodeFunctionData(sig, args);
     for (let i = 0; i < retries; i++) {
         try {
-            const result = await arcSend('eth_call', [{ to: TAPUSDC_ADDRESS, data }, 'latest']);
+            const result = await arcSend('eth_call', [{ to: contractAddr, data }, 'latest']);
             if (result && result !== '0x') return limitIface.decodeFunctionResult(sig, result)[0];
             return null;
         } catch (err) {
@@ -105,6 +107,7 @@ const DashboardPage = () => {
     const { user }  = useAuth();
     const { isConnected, address, balances, fetchBalances, connector, walletType } = useWallet();
 
+    const [activeCurrency,   setActiveCurrency]   = useState(() => localStorage.getItem('kodaCurrency') || 'TAPUSDC');
     const [hidden,           setHidden]           = useState(false);
     const [showWrap,         setShowWrap]         = useState(false);
     const [showUnwrap,       setShowUnwrap]       = useState(false);
@@ -123,41 +126,123 @@ const DashboardPage = () => {
     const walletInfo = useWalletInfo(walletType, connector);
     const shortAddr  = (a) => a ? `${a.slice(0, 6)}…${a.slice(-4)}` : '';
 
+    // Tutorial steps 2, 3 & 4
+    const { tourStep, setTourStep, dismissTour } = useTutorial();
+    const faucetRef    = useRef(null);
+    const [faucetRect,    setFaucetRect]    = useState(null);
+    const wrapRef      = useRef(null);
+    const [wrapRect,      setWrapRect]      = useState(null);
+    const cardPanelRef = useRef(null);
+    const [cardPanelRect, setCardPanelRect] = useState(null);
+
+    // Skip step 2 if user already has meaningful USDC
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     useEffect(() => {
-        if (balances.TAPUSDC || balances.USDC) {
-            recordBalanceSnapshot(balances.TAPUSDC, balances.USDC);
+        if (tourStep !== 2) return;
+        if (parseFloat(balances.USDC || '0') >= 1) setTourStep(3);
+    }, [tourStep]); // balances.USDC intentionally omitted
+
+    // Skip step 4 if user already has a card
+    useEffect(() => {
+        if (tourStep !== 4) return;
+        if (!cardLoading && card) dismissTour();
+    }, [tourStep, cardLoading, card]);
+
+    const makeMeasureEffect = (step, ref, setRect) => () => {
+        if (tourStep !== step) { setRect(null); return; }
+        const measure = () => {
+            if (!ref.current) return;
+            const r = ref.current.getBoundingClientRect();
+            setRect({ top: r.top, left: r.left, right: r.right, bottom: r.bottom, width: r.width, height: r.height, winW: window.innerWidth });
+        };
+        const raf = requestAnimationFrame(measure);
+        window.addEventListener('resize', measure);
+        window.addEventListener('scroll', measure, true);
+        return () => { cancelAnimationFrame(raf); window.removeEventListener('resize', measure); window.removeEventListener('scroll', measure, true); };
+    };
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    useEffect(makeMeasureEffect(2, faucetRef,    setFaucetRect),    [tourStep]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    useEffect(makeMeasureEffect(3, wrapRef,      setWrapRect),      [tourStep]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    useEffect(makeMeasureEffect(4, cardPanelRef, setCardPanelRect), [tourStep]);
+
+    const advanceStep2 = () => setTourStep(3);
+    const advanceStep3 = () => { setShowWrap(true); setTourStep(4); };
+    const advanceStep4 = () => { dismissTour(); navigate('/createcard'); };
+
+    useEffect(() => {
+        if (balances.TAPUSDC || balances.USDC || balances.TAPEURC || balances.EURC) {
+            recordBalanceSnapshot(balances.TAPUSDC, balances.USDC, balances.TAPEURC, balances.EURC);
         }
-    }, [balances.TAPUSDC, balances.USDC]);
+    }, [balances.TAPUSDC, balances.USDC, balances.TAPEURC, balances.EURC]);
+
+    useEffect(() => {
+        const today     = new Date().toISOString().slice(0, 10);
+        const yesterday = new Date(Date.now() - 864e5).toISOString().slice(0, 10);
+        const fxUrl     = v => `https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@${v}/v1/currencies/gbp.json`;
+        fetch(fxUrl(today))
+            .then(r => r.ok ? r.json() : fetch(fxUrl(yesterday)).then(r2 => r2.json()))
+            .then(d => {
+                const { usd, eur } = d.gbp;
+                setFxRates({ gbpUsd: usd, gbpEur: eur, eurUsd: usd / eur, usdEur: eur / usd });
+                setFxDate(d.date);
+            })
+            .catch(() => {});
+    }, []);
 
     useEffect(() => {
         const token = localStorage.getItem('authToken');
         if (!token) { setCardLoading(false); return; }
 
-        axios.get('https://chainfree.site:7001/user/cards', {
+        axios.get(`${import.meta.env.VITE_AUTH_URL}/user/cards`, {
             headers: { Authorization: `Bearer ${token}` },
         }).then(async res => {
             if (res.data.success && res.data.data?.length > 0) {
                 const userCard = res.data.data[0];
                 setCard(userCard);
                 try {
-                    const details = await axios.post('https://chainfree.site:7000/retrieve-card-details', { cardId: userCard.card_id });
+                    const details = await axios.post(`${import.meta.env.VITE_API_URL}/retrieve-card-details`, { cardId: userCard.card_id });
                     const d = details.data.cardDetails || details.data.card || details.data;
                     setCardDetails(d);
                 } catch { /* non-fatal */ }
                 try {
                     setTxLoading(true);
-                    const txRes = await axios.get(`https://chainfree.site:7000/card-transactions/${userCard.card_id}`);
+                    const txRes = await axios.get(`${import.meta.env.VITE_API_URL}/card-transactions/${userCard.card_id}`);
                     if (txRes.data.success) {
                         const auths = txRes.data.stripe_authorizations || [];
                         const dbTx  = txRes.data.database_transactions  || [];
                         const merged = auths.map(auth => {
-                            const match = dbTx.find(d =>
-                                Math.abs(d.usd_cents) === Math.round(auth.amount * 100) && d.transaction_hash
-                            );
+                            if (!auth.approved) return { ...auth, txHash: null };
+                            const authTime = new Date(auth.created).getTime();
+                            const match = dbTx.find(d => {
+                                if (!d.transaction_hash) return false;
+                                const sameAmount = Math.abs(d.usd_cents) === Math.round(auth.amount * 100);
+                                const withinWindow = Math.abs(new Date(d.created_at).getTime() - authTime) < 5 * 60 * 1000;
+                                return sameAmount && withinWindow;
+                            });
                             return { ...auth, txHash: match?.transaction_hash || null };
                         });
-                        merged.sort((a, b) => new Date(b.created) - new Date(a.created));
-                        setTransactions(merged.slice(0, 10));
+
+                        // Pre-Stripe declines (balance/card-validation failures) never reach
+                        // Stripe so they won't appear in the auth list above. We write them
+                        // to card_balance_history with a sim_declined_* hash — surface them here.
+                        const simDeclines = dbTx
+                            .filter(d => d.transaction_hash?.startsWith('sim_declined'))
+                            .map(d => ({
+                                id:       d.transaction_hash,
+                                amount:   Math.abs(d.usd_cents) / 100,
+                                currency: 'gbp',
+                                merchant: (d.subscription_name || '').replace(/^Declined:\s*/, '') || 'Card payment',
+                                approved: false,
+                                created:  d.created_at,
+                                txHash:   null,
+                            }));
+
+                        const allTx = [...merged, ...simDeclines];
+                        allTx.sort((a, b) => new Date(b.created) - new Date(a.created));
+                        setTransactions(allTx.slice(0, 10));
                     }
                 } catch { /* non-fatal */ }
                 finally { setTxLoading(false); }
@@ -165,6 +250,8 @@ const DashboardPage = () => {
         }).catch(() => {}).finally(() => setCardLoading(false));
     }, []);
 
+    const [fxRates,          setFxRates]          = useState(null);
+    const [fxDate,           setFxDate]           = useState(null);
     const [dailyAvailable,   setDailyAvailable]   = useState(null);
     const [dailyLimit,       setDailyLimit]       = useState(null);
     const [showLimitModal,   setShowLimitModal]   = useState(false);
@@ -173,16 +260,21 @@ const DashboardPage = () => {
 
     const fetchDailyLimit = useCallback(async () => {
         if (!address) return;
+        const contractAddr = activeCurrency === 'TAPEURC' ? TAPEURC_ADDRESS : TAPUSDC_ADDRESS;
         const [available, personal, global] = await Promise.all([
-            rawLimitCall('getAvailableSpendingToday', [address]),
-            rawLimitCall('dailySpendingLimit', [address]),
-            rawLimitCall('globalDailyLimit'),
+            rawLimitCall('getAvailableSpendingToday', [address], contractAddr),
+            rawLimitCall('dailySpendingLimit', [address], contractAddr),
+            rawLimitCall('globalDailyLimit', [], contractAddr),
         ]);
         const effectiveLimit = (personal != null && personal > 0n) ? personal : (global ?? 0n);
         setDailyAvailable(available ?? 0n);
         setDailyLimit(effectiveLimit);
-    }, [address]);
+    }, [address, activeCurrency]);
 
+    useEffect(() => {
+        setDailyAvailable(null);
+        setDailyLimit(null);
+    }, [activeCurrency]);
     useEffect(() => { fetchDailyLimit(); }, [fetchDailyLimit]);
 
     const dailySpent    = dailyLimit !== null && dailyAvailable !== null ? dailyLimit - dailyAvailable : null;
@@ -200,8 +292,12 @@ const DashboardPage = () => {
         try {
             const provider = new ethers.BrowserProvider(connector.provider);
             const signer   = await provider.getSigner();
-            const tapusdc  = new ethers.Contract(TAPUSDC_ADDRESS, LIMIT_ABI, signer);
-            const tx = await tapusdc.setDailySpendingLimit(ethers.parseUnits(limitInput, 6));
+            const contractAddr = activeCurrency === 'TAPEURC' ? TAPEURC_ADDRESS : TAPUSDC_ADDRESS;
+            const tapusdc  = new ethers.Contract(contractAddr, LIMIT_ABI, signer);
+            // Fetch nonce from Arc RPC directly — wallet cache can lag behind chain state
+            const rawNonce = await arcSend('eth_getTransactionCount', [address, 'pending']);
+            const nonce    = parseInt(rawNonce, 16);
+            const tx = await tapusdc.setDailySpendingLimit(ethers.parseUnits(limitInput, 6), { nonce });
             await tx.wait();
             setShowLimitModal(false);
             setLimitInput('');
@@ -216,7 +312,7 @@ const DashboardPage = () => {
         try {
             const token = localStorage.getItem('authToken');
             const res = await axios.post(
-                'https://chainfree.site:7001/user/activate-card', {},
+                `${import.meta.env.VITE_AUTH_URL}/user/activate-card`, {},
                 { headers: { Authorization: `Bearer ${token}` } }
             );
             if (res.data.success) {
@@ -236,7 +332,7 @@ const DashboardPage = () => {
         setFetchedCard(null);
         setShowCardDetails(true);
         try {
-            const res = await axios.post('https://chainfree.site:7000/retrieve-card-details', { cardId: cId });
+            const res = await axios.post(`${import.meta.env.VITE_API_URL}/retrieve-card-details`, { cardId: cId });
             if (res.data.success) setFetchedCard(res.data.cardDetails);
         } catch { /* modal stays open, shows error */ }
         finally { setCardDetailsBusy(false); }
@@ -250,11 +346,31 @@ const DashboardPage = () => {
         setTimeout(() => setCopied(false), 2000);
     };
 
+    const switchCurrency = (c) => {
+        setActiveCurrency(c);
+        localStorage.setItem('kodaCurrency', c);
+    };
+
+    const isEUR       = activeCurrency === 'TAPEURC';
+    const baseBalance = isEUR ? balances.TAPEURC : balances.TAPUSDC;
+    const stabBalance = isEUR ? balances.EURC    : balances.USDC;
+    const stabLabel   = isEUR ? 'EURC'           : 'USDC';
+
     return (
+      <>
         <Page>
             {/* Hero row */}
             <HeroRow>
                 <HeroLeftCol>
+                    <CurrencyToggleBar>
+                        <CurrencyToggleOpt $active={!isEUR} onClick={() => switchCurrency('TAPUSDC')}>
+                            TAPUSDC
+                        </CurrencyToggleOpt>
+                        <CurrencyToggleOpt $active={isEUR} onClick={() => switchCurrency('TAPEURC')}>
+                            TAPEURC
+                        </CurrencyToggleOpt>
+                    </CurrencyToggleBar>
+
                     <HeroTopRow>
                         <HeroLeft>
                             <HeroDotPattern />
@@ -280,18 +396,18 @@ const DashboardPage = () => {
                             <BalanceLabel>Total Balance</BalanceLabel>
 
                             <HeroBalanceRow>
-                                <BalanceAmount>{hidden ? '••••••' : fmt(balances.TAPUSDC)}</BalanceAmount>
+                                <BalanceAmount>{hidden ? '••••••' : fmt(baseBalance)}</BalanceAmount>
                                 <HeroCurrencyPill>
                                     <EyeToggle onClick={() => setHidden(h => !h)}>
                                         {hidden ? <Eye size={12} /> : <EyeOff size={12} />}
                                     </EyeToggle>
-                                    TAPUSDC
+                                    {activeCurrency}
                                 </HeroCurrencyPill>
                             </HeroBalanceRow>
 
                             <SecondaryBalance>
-                                <SecondaryAmount>{hidden ? '••••' : fmt(balances.USDC)}</SecondaryAmount>
-                                <SecondaryCurrency>USDC</SecondaryCurrency>
+                                <SecondaryAmount>{hidden ? '••••' : fmt(stabBalance)}</SecondaryAmount>
+                                <SecondaryCurrency>{stabLabel}</SecondaryCurrency>
                                 <SecondaryDivider />
                                 <SecondaryLabel>in wallet</SecondaryLabel>
                             </SecondaryBalance>
@@ -302,9 +418,9 @@ const DashboardPage = () => {
                         <HeroLeftExtra>
                             <ExtraTitle>Actions</ExtraTitle>
                             <ActionsList>
-                                <ActionRow onClick={() => setShowWrap(true)}>
+                                <ActionRow ref={wrapRef} onClick={tourStep === 3 ? advanceStep3 : () => setShowWrap(true)}>
                                     <ArrowDownLeft size={15} color="rgba(255,255,255,0.45)" />
-                                    <ActionRowLabel>Wrap USDC</ActionRowLabel>
+                                    <ActionRowLabel>Wrap</ActionRowLabel>
                                     <ChevronRight size={14} color="rgba(255,255,255,0.2)" />
                                 </ActionRow>
                                 <ActionRowDivider />
@@ -320,16 +436,21 @@ const DashboardPage = () => {
                                     <ChevronRight size={14} color="rgba(255,255,255,0.2)" />
                                 </ActionRow>
                                 <ActionRowDivider />
-                                <ActionRow as="a" href="https://faucet.circle.com/" target="_blank" rel="noopener noreferrer">
+                                <ActionRow ref={faucetRef} as="a" href="https://faucet.circle.com/" target="_blank" rel="noopener noreferrer" onClick={tourStep === 2 ? advanceStep2 : undefined}>
                                     <Droplets size={15} color="rgba(255,255,255,0.45)" />
-                                    <ActionRowLabel>Get USDC</ActionRowLabel>
+                                    <ActionRowLabel>Get USDC / EURC</ActionRowLabel>
                                     <ChevronRight size={14} color="rgba(255,255,255,0.2)" />
                                 </ActionRow>
                             </ActionsList>
                         </HeroLeftExtra>
                     </HeroTopRow>
 
-                    <BalanceHistoryChart tapusdcBalance={balances.TAPUSDC} usdcBalance={balances.USDC} />
+                    <BalanceHistoryChart
+                        tapusdcBalance={balances.TAPUSDC}
+                        usdcBalance={balances.USDC}
+                        tapeurcBalance={balances.TAPEURC}
+                        eurcBalance={balances.EURC}
+                    />
 
                     {/* Recent activity */}
                     <ActivityCard>
@@ -369,7 +490,7 @@ const DashboardPage = () => {
                                                         {approved ? 'Approved' : 'Declined'}
                                                         {tx.txHash && (
                                                             <TxHashLink
-                                                                href={`https://testnet.arcscan.app/tx/${tx.txHash}`}
+                                                                href={`${import.meta.env.VITE_EXPLORER_URL}/tx/${tx.txHash}`}
                                                                 target="_blank"
                                                                 rel="noopener noreferrer"
                                                             >
@@ -409,66 +530,43 @@ const DashboardPage = () => {
                         ) : card ? (
                             <>
                                 <KodaCard>
-                                    <CardGlow />
-                                    <CardFaceTop>
-                                        <NfcIcon />
-                                        <CardNumExpiry>
-                                            <CardNumLine>
-                                                {cardDetails?.last4 ? `**** **** ${cardDetails.last4}` : '**** **** ••••'}
-                                            </CardNumLine>
-                                            <CardExpiryLine>
-                                                {cardDetails?.exp_month && cardDetails?.exp_year
-                                                    ? `${String(cardDetails.exp_month).padStart(2,'0')}/${String(cardDetails.exp_year).slice(-2)}`
-                                                    : '••/••'}
-                                            </CardExpiryLine>
-                                        </CardNumExpiry>
-                                    </CardFaceTop>
-                                    <CardFaceMid>
-                                        <ChipSvg />
-                                    </CardFaceMid>
-                                    <CardFaceBottom>
-                                        <CardHolderBlock>
-                                            <CardHolderLabel>Card Holder Name</CardHolderLabel>
-                                            <CardHolderName>
-                                                {cardDetails?.cardholder_name ?? user?.name ?? 'Koda User'}
-                                            </CardHolderName>
-                                        </CardHolderBlock>
-                                        <VisaText>VISA</VisaText>
-                                    </CardFaceBottom>
-                                </KodaCard>
-
-                                <QuickActionsCard>
-                                    <QuickActionsTitle>Quick Action</QuickActionsTitle>
-                                    <CardQuickActions>
+                                    <CardTopRow>
+                                        <CardWordmark>koda</CardWordmark>
+                                        <CardBalanceAmount>{fmt(balances[activeCurrency])}</CardBalanceAmount>
+                                    </CardTopRow>
+                                    <CardMidRow>
+                                        <CardAccountLine>
+                                            {cardDetails?.last4 ? `•••• •••• •••• ${cardDetails.last4}` : '•••• •••• •••• ••••'}
+                                        </CardAccountLine>
+                                        <CardBalanceLabel>Balance</CardBalanceLabel>
+                                    </CardMidRow>
+                                    <CardActionRow>
                                         <Tip text="View your full card number, expiry date and CVV for online payments">
-                                            <CardQuickBtn onClick={handleViewCardDetails}>
-                                                <CardQuickIcon><Eye size={18} /></CardQuickIcon>
-                                                <span>Details</span>
-                                            </CardQuickBtn>
+                                            <CardActionBtn onClick={handleViewCardDetails}>
+                                                <Eye size={14} /> Details
+                                            </CardActionBtn>
                                         </Tip>
                                         <Tip text="Copy your card number to clipboard">
-                                            <CardQuickBtn onClick={handleCopyCardNumber} disabled={!cardDetails?.card_number}>
-                                                <CardQuickIcon>{copied ? <Check size={18} /> : <Copy size={18} />}</CardQuickIcon>
-                                                <span>{copied ? 'Copied' : 'Copy'}</span>
-                                            </CardQuickBtn>
+                                            <CardActionBtn onClick={handleCopyCardNumber} disabled={!cardDetails?.card_number}>
+                                                {copied ? <Check size={14} /> : <Copy size={14} />}
+                                                {copied ? 'Copied' : 'Copy'}
+                                            </CardActionBtn>
                                         </Tip>
                                         <Tip text="Temporarily block all new payments on this card — you can unfreeze at any time">
-                                            <CardQuickBtn>
-                                                <CardQuickIcon><Snowflake size={18} /></CardQuickIcon>
-                                                <span>Freeze</span>
-                                            </CardQuickBtn>
+                                            <CardActionBtn>
+                                                <Snowflake size={14} /> Freeze
+                                            </CardActionBtn>
                                         </Tip>
                                         <Tip text="Additional card settings and options">
-                                            <CardQuickBtn>
-                                                <CardQuickIcon><MoreHorizontal size={18} /></CardQuickIcon>
-                                                <span>More</span>
-                                            </CardQuickBtn>
+                                            <CardActionBtn>
+                                                <MoreHorizontal size={14} /> More
+                                            </CardActionBtn>
                                         </Tip>
-                                    </CardQuickActions>
-                                </QuickActionsCard>
+                                    </CardActionRow>
+                                </KodaCard>
                             </>
                         ) : (
-                            <NoCardPanel onClick={() => navigate('/createcard')}>
+                            <NoCardPanel ref={cardPanelRef} onClick={tourStep === 4 ? advanceStep4 : () => navigate('/createcard')}>
                                 <NoCardInner>
                                     <NoCardIcon><Plus size={22} /></NoCardIcon>
                                     <NoCardTitle>Create your Koda card</NoCardTitle>
@@ -503,7 +601,7 @@ const DashboardPage = () => {
                                     {limitStatus === 'loading' && '—'}
                                     {limitStatus !== 'loading' && (
                                         <>
-                                            {fmt(ethers.formatUnits(dailySpent ?? 0n, 6))} of {fmt(ethers.formatUnits(dailyLimit ?? 0n, 6))} TAPUSDC used today
+                                            {fmt(ethers.formatUnits(dailySpent ?? 0n, 6))} of {fmt(ethers.formatUnits(dailyLimit ?? 0n, 6))} {activeCurrency} used today
                                         </>
                                     )}
                                 </ApprovalBarLabel>
@@ -519,6 +617,26 @@ const DashboardPage = () => {
                             </ApprovalActions>
                         </ApprovalCard>
                     )}
+
+                    <FxCard>
+                        <FxCardHeader>
+                            <FxCardTitle>FX Rates</FxCardTitle>
+                            {fxDate && <FxCardDate>ECB · {fxDate}</FxCardDate>}
+                        </FxCardHeader>
+                        <FxPairList>
+                            {[
+                                { label: 'GBP / USD', value: fxRates?.gbpUsd },
+                                { label: 'GBP / EUR', value: fxRates?.gbpEur },
+                                { label: 'EUR / USD', value: fxRates?.eurUsd },
+                                { label: 'USD / EUR', value: fxRates?.usdEur },
+                            ].map(({ label, value }) => (
+                                <FxPairRow key={label}>
+                                    <FxPairLabel>{label}</FxPairLabel>
+                                    <FxPairRate>{value ? value.toFixed(4) : '—'}</FxPairRate>
+                                </FxPairRow>
+                            ))}
+                        </FxPairList>
+                    </FxCard>
 
                     <HelpCard>
                         <HelpIconWrap>?</HelpIconWrap>
@@ -638,7 +756,7 @@ const DashboardPage = () => {
                         <ModalHeader>
                             <div>
                                 <ApprovalModalTitle>Set daily spending limit</ApprovalModalTitle>
-                                <ModalHeaderSub>Max TAPUSDC you can spend per day</ModalHeaderSub>
+                                <ModalHeaderSub>Max {activeCurrency} you can spend per day</ModalHeaderSub>
                             </div>
                             <ApprovalModalClose onClick={() => setShowLimitModal(false)}><X size={14} /></ApprovalModalClose>
                         </ModalHeader>
@@ -647,8 +765,8 @@ const DashboardPage = () => {
                             <ApprovalTokenBox>
                                 <ApprovalAmountLabel>
                                     <span>Daily limit</span>
-                                    <ApprovalBalanceHint onClick={() => setLimitInput(balances.TAPUSDC || '0')}>
-                                        Balance: {fmt(balances.TAPUSDC)} — Max
+                                    <ApprovalBalanceHint onClick={() => setLimitInput(balances[activeCurrency] || '0')}>
+                                        Balance: {fmt(balances[activeCurrency])} — Max
                                     </ApprovalBalanceHint>
                                 </ApprovalAmountLabel>
                                 <ApprovalTokenRow>
@@ -660,11 +778,11 @@ const DashboardPage = () => {
                                         disabled={limitBusy}
                                         autoFocus
                                     />
-                                    <ApprovalAmountToken>TAPUSDC</ApprovalAmountToken>
+                                    <ApprovalAmountToken>{activeCurrency}</ApprovalAmountToken>
                                 </ApprovalTokenRow>
                             </ApprovalTokenBox>
                             <ApprovalModalNote>
-                                Sets the maximum amount of TAPUSDC you can spend in a single day. Set to 0 to use the global default.
+                                Sets the maximum amount of {activeCurrency} you can spend in a single day. Set to 0 to use the global default.
                             </ApprovalModalNote>
                         </ModalBody>
 
@@ -680,6 +798,76 @@ const DashboardPage = () => {
                 </ModalOverlay>
             )}
         </Page>
+
+        {tourStep === 2 && faucetRect && (
+            <>
+                <TourSpotlight style={{
+                    top:    faucetRect.top    - 8,
+                    left:   faucetRect.left   - 8,
+                    width:  faucetRect.width  + 16,
+                    height: faucetRect.height + 16,
+                }} />
+                <TourCard style={{
+                    top:  faucetRect.bottom + 16,
+                    left: faucetRect.left - 8,
+                }}>
+                    <TourArrow style={{ left: 20, right: 'auto' }} />
+                    <TourStepPill>Step 2 of 4</TourStepPill>
+                    <TourTitle>Get some USDC</TourTitle>
+                    <TourBody>
+                        You'll need USDC to wrap into TAPUSDC and spend with your Koda card. Click here to visit Circle's free testnet faucet. Funds arrive in seconds.
+                    </TourBody>
+                    <TourSkip onClick={dismissTour}>Skip tutorial</TourSkip>
+                </TourCard>
+            </>
+        )}
+
+        {tourStep === 3 && wrapRect && (
+            <>
+                <TourSpotlight style={{
+                    top:    wrapRect.top    - 8,
+                    left:   wrapRect.left   - 8,
+                    width:  wrapRect.width  + 16,
+                    height: wrapRect.height + 16,
+                }} />
+                <TourCard style={{
+                    top:  wrapRect.bottom + 16,
+                    left: wrapRect.left - 8,
+                }}>
+                    <TourArrow style={{ left: 20, right: 'auto' }} />
+                    <TourStepPill>Step 3 of 4</TourStepPill>
+                    <TourTitle>Wrap your USDC</TourTitle>
+                    <TourBody>
+                        Tap Wrap to convert your USDC into TAPUSDC, the spendable token on your Koda card. You can also wrap EURC into TAPEURC if you prefer euros.
+                    </TourBody>
+                    <TourSkip onClick={dismissTour}>Skip tutorial</TourSkip>
+                </TourCard>
+            </>
+        )}
+
+        {tourStep === 4 && cardPanelRect && (
+            <>
+                <TourSpotlight style={{
+                    top:    cardPanelRect.top    - 8,
+                    left:   cardPanelRect.left   - 8,
+                    width:  cardPanelRect.width  + 16,
+                    height: cardPanelRect.height + 16,
+                }} />
+                <TourCard style={{
+                    top:  cardPanelRect.bottom + 16,
+                    left: cardPanelRect.left - 8,
+                }}>
+                    <TourArrow style={{ left: 20, right: 'auto' }} />
+                    <TourStepPill>Step 4 of 4</TourStepPill>
+                    <TourTitle>Create your card</TourTitle>
+                    <TourBody>
+                        You are ready. Tap here to create your Koda virtual Visa card and start spending your TAPUSDC anywhere Visa is accepted.
+                    </TourBody>
+                    <TourSkip onClick={dismissTour}>Skip tutorial</TourSkip>
+                </TourCard>
+            </>
+        )}
+      </>
     );
 };
 
@@ -824,6 +1012,44 @@ const HeroLeftCol = styled.div`
     flex-direction: column;
     gap: 16px;
     min-width: 0;
+`;
+
+const CurrencyToggleBar = styled.div`
+    display: flex;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 12px;
+    padding: 4px;
+    gap: 4px;
+`;
+
+const CurrencyToggleOpt = styled.button`
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    padding: 9px 16px;
+    border: none;
+    border-radius: 9px;
+    font-family: 'Google Sans Flex', 'Sora', sans-serif;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.2px;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+    background: ${p => p.$active ? '#4F55F1' : 'transparent'};
+    color: ${p => p.$active ? '#ffffff' : 'rgba(255,255,255,0.35)'};
+    &:hover { color: ${p => p.$active ? '#ffffff' : 'rgba(255,255,255,0.65)'}; }
+`;
+
+const CurrencyToggleDot = styled.span`
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    background: ${p => p.$active ? '#4F55F1' : 'rgba(255,255,255,0.15)'};
+    transition: background 0.15s;
 `;
 
 const HeroTopRow = styled.div`
@@ -1228,169 +1454,92 @@ const AddCardBtn = styled.button`
     &:hover { border-color: rgba(255,255,255,0.25); color: #ffffff; }
 `;
 
-// Card face
+// Card panel
 
 const KodaCard = styled.div`
-    position: relative;
-    background: linear-gradient(135deg, #4F55F1 0%, #2e8a6e 55%, #00A87E 100%);
-    border-radius: 18px;
-    padding: 22px;
-    height: 210px;
+    background: #8D969E15
+    
+    ;
+    border-radius: 16px;
+    overflow: hidden;
     flex-shrink: 0;
+    height: 200px;
     display: flex;
     flex-direction: column;
-    justify-content: space-between;
-    overflow: hidden;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.28);
 `;
 
-const CardGlow = styled.div`
-    position: absolute;
-    top: -80px; left: -40px;
-    width: 260px; height: 260px;
-    border-radius: 50%;
-    background: radial-gradient(circle, rgba(255,255,255,0.12), transparent 70%);
-    pointer-events: none;
-`;
-
-const CardFaceTop = styled.div`
+const CardTopRow = styled.div`
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
-    position: relative;
-    z-index: 1;
+    padding: 18px 18px 8px;
 `;
 
-const CardNumExpiry = styled.div`
-    text-align: right;
-`;
-
-const CardNumLine = styled.p`
-    font-family: 'SF Mono', 'Fira Code', monospace;
-    font-size: 13px;
-    font-weight: 500;
-    color: rgba(255,255,255,0.88);
-    letter-spacing: 1.5px;
-    margin: 0 0 4px;
-    white-space: nowrap;
-`;
-
-const CardExpiryLine = styled.p`
-    font-family: 'SF Mono', 'Fira Code', monospace;
-    font-size: 11px;
-    color: rgba(255,255,255,0.45);
-    letter-spacing: 1px;
-    margin: 0;
-`;
-
-const CardFaceMid = styled.div`
-    position: relative;
-    z-index: 1;
-`;
-
-const CardFaceBottom = styled.div`
-    display: flex;
-    align-items: flex-end;
-    justify-content: space-between;
-    gap: 10px;
-    position: relative;
-    z-index: 1;
-`;
-
-const CardHolderBlock = styled.div`
-    flex: 1;
-    min-width: 0;
-`;
-
-const CardHolderLabel = styled.p`
+const CardWordmark = styled.span`
     font-family: 'Google Sans Flex', 'Sora', sans-serif;
-    font-size: 9px;
-    font-weight: 500;
-    color: rgba(255,255,255,0.35);
-    letter-spacing: 0.4px;
-    margin: 0 0 3px;
-`;
-
-const CardHolderName = styled.p`
-    font-family: 'Saira', 'Sora', sans-serif;
     font-size: 14px;
     font-weight: 700;
-    color: #ffffff;
-    margin: 0;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    color: rgba(255,255,255,0.9);
+    letter-spacing: 0.5px;
 `;
 
-const VisaText = styled.span`
-    font-family: 'Times New Roman', Times, serif;
-    font-size: 26px;
-    font-weight: 900;
-    font-style: italic;
-    white-space: nowrap;
-    letter-spacing: 1px;
-    line-height: 1;
-    background: linear-gradient(180deg, #ffffff 0%, #e8d48a 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-    text-shadow: none;
-    filter: drop-shadow(0 1px 2px rgba(0,0,0,0.3));
-`;
-
-// Quick actions
-
-const QuickActionsCard = styled.div`
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    background: linear-gradient(45deg, #ffffff05 40%, #121212);
-    border: 1px solid #ffffff20;
-    border-radius: 16px;
-    padding: 16px;
-`;
-
-const QuickActionsTitle = styled.p`
-    font-family: 'Saira', 'Sora', sans-serif;
-    font-size: 13px;
+const CardBalanceAmount = styled.p`
+    font-family: 'Google Sans Flex', 'Sora', sans-serif;
+    font-size: 22px;
     font-weight: 700;
-    color: #fff;
+    color: #ffffff;
+    margin: 0;
+    line-height: 1;
+`;
+
+const CardMidRow = styled.div`
+    display: flex;
+    flex: 1;
+    justify-content: space-between;
+    align-items: flex-end;
+    padding: 4px 18px 16px;
+`;
+
+const CardAccountLine = styled.p`
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 13px;
+    font-weight: 500;
+    color: rgba(255,255,255,0.82);
+    letter-spacing: 2px;
     margin: 0;
 `;
 
-const CardQuickActions = styled.div`
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 8px;
-`;
-
-const CardQuickIcon = styled.div`
-    width: 44px; height: 44px;
-    display: grid;
-    place-items: center;
-    border-radius: 14px;
-    color: #ffffff;
-    transition: background 0.15s;
-`;
-
-const CardQuickBtn = styled.button`
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 7px;
-    border: none;
-    padding: 10px 4px;
-    width: 100%;
-    background: transparent;
-    border-radius: 12px;
-    color: rgba(255,255,255,0.65);
+const CardBalanceLabel = styled.p`
     font-family: 'Google Sans Flex', 'Sora', sans-serif;
     font-size: 11px;
+    color: rgba(255,255,255,0.5);
+    margin: 0;
+`;
+
+const CardActionRow = styled.div`
+    display: flex;
+    gap: 6px;
+    padding: 10px 12px;
+    border-top: 1px solid rgba(255,255,255,0.15);
+`;
+
+const CardActionBtn = styled.button`
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 13px;
+    border: none;
+    border-radius: 20px;
+    background: rgba(0,0,0,0.18);
+    color: rgba(255,255,255,0.9);
+    font-family: 'Google Sans Flex', 'Sora', sans-serif;
+    font-size: 12px;
     font-weight: 600;
     cursor: pointer;
-    transition: opacity 0.15s;
-    &:hover { opacity: 0.75; }
-    &:hover ${CardQuickIcon} { background: rgba(255,255,255,0.13); }
-    &:disabled { opacity: 0.3; cursor: default; }
+    transition: background 0.15s;
+    &:hover { background: rgba(0,0,0,0.28); }
+    &:disabled { opacity: 0.4; cursor: default; }
 `;
 
 // No-card state
@@ -1710,6 +1859,67 @@ const EmptyBody = styled.p`
 `;
 
 // Help card
+
+const FxCard = styled.div`
+    background: linear-gradient(45deg, #ffffff05 40%, #121212);
+    border: 1px solid #ffffff20;
+    border-radius: 16px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+`;
+
+const FxCardHeader = styled.div`
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+`;
+
+const FxCardTitle = styled.p`
+    font-family: 'Google Sans Flex', 'Sora', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    color: #ffffff;
+    margin: 0;
+`;
+
+const FxCardDate = styled.p`
+    font-family: 'SF Mono', monospace;
+    font-size: 10px;
+    color: rgba(255,255,255,0.3);
+    margin: 0;
+`;
+
+const FxPairList = styled.div`
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+`;
+
+const FxPairRow = styled.div`
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    &:last-child { border-bottom: none; }
+`;
+
+const FxPairLabel = styled.span`
+    font-family: 'Google Sans Flex', 'Sora', sans-serif;
+    font-size: 12px;
+    color: rgba(255,255,255,0.5);
+    letter-spacing: 0.3px;
+`;
+
+const FxPairRate = styled.span`
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 13px;
+    font-weight: 600;
+    color: rgba(255,255,255,0.88);
+    letter-spacing: 0.5px;
+`;
 
 const HelpCard = styled.div`
     background: linear-gradient(45deg, #ffffff05 40%, #121212);
@@ -2073,6 +2283,101 @@ const TinySpinner = styled.div`
     border-radius: 50%;
     animation: ${spin} 0.7s linear infinite;
     flex-shrink: 0;
+`;
+
+// Tutorial overlay (step 2)
+
+const spotPulse2 = keyframes`
+    0%, 100% { border-color: rgba(79,85,241,0.65); }
+    50%       { border-color: rgba(79,85,241,1); box-shadow: 0 0 0 9999px rgba(0,0,0,0.62), 0 0 18px rgba(79,85,241,0.25); }
+`;
+
+const tourFadeIn2 = keyframes`
+    from { opacity: 0; transform: translateY(-8px); }
+    to   { opacity: 1; transform: translateY(0); }
+`;
+
+const TourSpotlight = styled.div`
+    position: fixed;
+    border-radius: 12px;
+    border: 2px solid rgba(79,85,241,0.65);
+    box-shadow: 0 0 0 9999px rgba(0,0,0,0.62);
+    pointer-events: none;
+    z-index: 500;
+    animation: ${spotPulse2} 2.2s ease infinite;
+`;
+
+const TourCard = styled.div`
+    position: fixed;
+    z-index: 501;
+    width: 288px;
+    background: #13131f;
+    border: 1px solid rgba(79,85,241,0.3);
+    border-radius: 18px;
+    padding: 20px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.7), 0 0 0 1px rgba(79,85,241,0.08) inset;
+    animation: ${tourFadeIn2} 0.35s ease both;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+`;
+
+const TourArrow = styled.div`
+    position: absolute;
+    top: -7px;
+    right: 22px;
+    width: 12px;
+    height: 12px;
+    background: #13131f;
+    border-top: 1px solid rgba(79,85,241,0.3);
+    border-left: 1px solid rgba(79,85,241,0.3);
+    transform: rotate(45deg);
+`;
+
+const TourStepPill = styled.span`
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 10px;
+    border-radius: 20px;
+    background: rgba(79,85,241,0.12);
+    border: 1px solid rgba(79,85,241,0.28);
+    font-family: 'Google Sans Flex', sans-serif;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    color: #7b81f5;
+    align-self: flex-start;
+`;
+
+const TourTitle = styled.h3`
+    font-family: 'Saira', sans-serif;
+    font-size: 17px;
+    font-weight: 800;
+    color: #ffffff;
+    margin: 0;
+    letter-spacing: -0.3px;
+`;
+
+const TourBody = styled.p`
+    font-family: 'Google Sans Flex', sans-serif;
+    font-size: 13px;
+    color: rgba(255,255,255,0.5);
+    line-height: 1.65;
+    margin: 0;
+`;
+
+const TourSkip = styled.button`
+    background: none;
+    border: none;
+    padding: 0;
+    font-family: 'Google Sans Flex', sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    color: rgba(255,255,255,0.22);
+    cursor: pointer;
+    text-align: left;
+    transition: color 0.2s;
+    &:hover { color: rgba(255,255,255,0.55); }
 `;
 
 export default DashboardPage;

@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { TutorialContext } from '../context/TutorialContext';
 import styled, { keyframes } from 'styled-components';
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { LayoutDashboard, Wallet, CreditCard, Repeat, LogOut, ShoppingBag, Menu, X, RefreshCw, Copy, Check, BookOpen } from 'lucide-react';
 import { useAuth } from '../context/AuthContext.js';
 import { useWallet } from '../context/WalletContext.js';
@@ -8,9 +9,12 @@ import kodaLogo from '../assets/koda-logo.png';
 import { arcSend } from '../lib/arcRpc.js';
 import { ethers } from 'ethers';
 
-const TAPUSDC_ADDRESS = '0xCb96C70be34cd6484e69D1BEd5ad2F22602191e3';
-const USDC_ADDRESS    = '0x3600000000000000000000000000000000000000';
-const WRAPPER_ADDRESS = '0x9D845625eb0010F9a63213240Da722424C684DCf';
+const TAPUSDC_ADDRESS        = '0xCb96C70be34cd6484e69D1BEd5ad2F22602191e3';
+const USDC_ADDRESS           = '0x3600000000000000000000000000000000000000';
+const WRAPPER_ADDRESS        = '0x9D845625eb0010F9a63213240Da722424C684DCf';
+const TAPEURC_ADDRESS        = '0x36247A653A1253A96a286f5E296c06fF958b1ac0';
+const EURC_ADDRESS           = '0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a';
+const EURC_WRAPPER_ADDRESS   = '0x72d038055795631c057a3DA26c37EACa92Cb9AdB';
 
 const ERC20_IFACE = new ethers.Interface([
     'function totalSupply() view returns (uint256)',
@@ -28,28 +32,71 @@ const NAV_ITEMS = [
 const AppLayout = () => {
     const { user, logout } = useAuth();
     const { isConnected, address, connect, disconnect, connecting, fetchBalances } = useWallet();
-    const navigate = useNavigate();
+    const navigate  = useNavigate();
+    const location  = useLocation();
     const [mobileOpen, setMobileOpen] = useState(false);
     const [copied, setCopied] = useState(false);
-    const [tapusdcSupply, setTapusdcSupply] = useState(null);
-    const [usdcInWrapper, setUsdcInWrapper] = useState(null);
-    const [statsLoading, setStatsLoading] = useState(false);
+    const [tapusdcSupply,  setTapusdcSupply]  = useState(null);
+    const [usdcInWrapper,  setUsdcInWrapper]  = useState(null);
+    const [tapeurcSupply,  setTapeurcSupply]  = useState(null);
+    const [eurcInWrapper,  setEurcInWrapper]  = useState(null);
+    const [statsLoading,   setStatsLoading]   = useState(false);
 
+    // Tutorial
+    const connectBtnRef = useRef(null);
+    const [tourStep,    setTourStep]    = useState(0);
+    const [spotRect,    setSpotRect]    = useState(null);
+
+    const fetchProtocolStats = async () => {
+        setStatsLoading(true);
+        try {
+            const [supplyRaw, balanceRaw, eurcSupplyRaw, eurcBalanceRaw] = await Promise.all([
+                arcSend('eth_call', [{ to: TAPUSDC_ADDRESS, data: ERC20_IFACE.encodeFunctionData('totalSupply') }, 'latest']),
+                arcSend('eth_call', [{ to: USDC_ADDRESS,    data: ERC20_IFACE.encodeFunctionData('balanceOf', [WRAPPER_ADDRESS]) }, 'latest']),
+                arcSend('eth_call', [{ to: TAPEURC_ADDRESS, data: ERC20_IFACE.encodeFunctionData('totalSupply') }, 'latest']),
+                arcSend('eth_call', [{ to: EURC_ADDRESS,    data: ERC20_IFACE.encodeFunctionData('balanceOf', [EURC_WRAPPER_ADDRESS]) }, 'latest']),
+            ]);
+            if (supplyRaw      && supplyRaw      !== '0x') setTapusdcSupply(ERC20_IFACE.decodeFunctionResult('totalSupply', supplyRaw)[0]);
+            if (balanceRaw     && balanceRaw     !== '0x') setUsdcInWrapper(ERC20_IFACE.decodeFunctionResult('balanceOf', balanceRaw)[0]);
+            if (eurcSupplyRaw  && eurcSupplyRaw  !== '0x') setTapeurcSupply(ERC20_IFACE.decodeFunctionResult('totalSupply', eurcSupplyRaw)[0]);
+            if (eurcBalanceRaw && eurcBalanceRaw !== '0x') setEurcInWrapper(ERC20_IFACE.decodeFunctionResult('balanceOf', eurcBalanceRaw)[0]);
+        } catch { /* silent */ }
+        setStatsLoading(false);
+    };
+
+    useEffect(() => { fetchProtocolStats(); }, []);
+
+    // Start tutorial when user lands on /dashboard for the first time (wallet not connected)
     useEffect(() => {
-        async function fetchProtocolStats() {
-            setStatsLoading(true);
-            try {
-                const [supplyRaw, balanceRaw] = await Promise.all([
-                    arcSend('eth_call', [{ to: TAPUSDC_ADDRESS, data: ERC20_IFACE.encodeFunctionData('totalSupply') }, 'latest']),
-                    arcSend('eth_call', [{ to: USDC_ADDRESS,    data: ERC20_IFACE.encodeFunctionData('balanceOf', [WRAPPER_ADDRESS]) }, 'latest']),
-                ]);
-                if (supplyRaw  && supplyRaw  !== '0x') setTapusdcSupply(ERC20_IFACE.decodeFunctionResult('totalSupply', supplyRaw)[0]);
-                if (balanceRaw && balanceRaw !== '0x') setUsdcInWrapper(ERC20_IFACE.decodeFunctionResult('balanceOf', balanceRaw)[0]);
-            } catch { /* silent */ }
-            setStatsLoading(false);
+        if (location.pathname === '/dashboard' && !isConnected && !localStorage.getItem('koda_tour_done')) {
+            setTourStep(1);
         }
-        fetchProtocolStats();
-    }, []);
+    }, [location.pathname]);
+
+    // Measure the connect button position whenever the tour starts
+    useEffect(() => {
+        if (tourStep !== 1) { setSpotRect(null); return; }
+        const measure = () => {
+            if (!connectBtnRef.current) return;
+            const r = connectBtnRef.current.getBoundingClientRect();
+            setSpotRect({ top: r.top, left: r.left, right: r.right, bottom: r.bottom, width: r.width, height: r.height, winW: window.innerWidth });
+        };
+        measure();
+        window.addEventListener('resize', measure);
+        return () => window.removeEventListener('resize', measure);
+    }, [tourStep]);
+
+    // Wallet connected → advance to step 2 (faucet)
+    useEffect(() => {
+        if (isConnected && tourStep === 1) {
+            setTourStep(2);
+        }
+    }, [isConnected, tourStep]);
+
+    const dismissTour = () => {
+        setTourStep(0);
+        localStorage.setItem('koda_tour_done', '1');
+    };
 
     const handleLogout = () => { logout(); navigate('/login'); };
     const shortAddr = (a) => a ? `${a.slice(0, 6)}…${a.slice(-4)}` : '';
@@ -71,6 +118,7 @@ const AppLayout = () => {
         : '?';
 
     return (
+        <TutorialContext.Provider value={{ tourStep, setTourStep, dismissTour }}>
         <Layout>
             {/* Mobile header */}
             <MobileHeader>
@@ -142,18 +190,21 @@ const AppLayout = () => {
                                 {statsLoading ? '···' : fmtSupply(usdcInWrapper)}
                             </BalanceValue>
                         </BalanceStat>
-                        <TopBarRefreshBtn onClick={() => {
-                            setTapusdcSupply(null);
-                            setUsdcInWrapper(null);
-                            setStatsLoading(true);
-                            Promise.all([
-                                arcSend('eth_call', [{ to: TAPUSDC_ADDRESS, data: ERC20_IFACE.encodeFunctionData('totalSupply') }, 'latest']),
-                                arcSend('eth_call', [{ to: USDC_ADDRESS,    data: ERC20_IFACE.encodeFunctionData('balanceOf', [WRAPPER_ADDRESS]) }, 'latest']),
-                            ]).then(([s, b]) => {
-                                if (s && s !== '0x') setTapusdcSupply(ERC20_IFACE.decodeFunctionResult('totalSupply', s)[0]);
-                                if (b && b !== '0x') setUsdcInWrapper(ERC20_IFACE.decodeFunctionResult('balanceOf', b)[0]);
-                            }).catch(() => {}).finally(() => setStatsLoading(false));
-                        }} title="Refresh protocol stats">
+                        <BalanceStackDiv />
+                        <BalanceStat>
+                            <BalanceLabel>TAPEURC Supply</BalanceLabel>
+                            <BalanceValue $dim={statsLoading}>
+                                {statsLoading ? '···' : fmtSupply(tapeurcSupply)}
+                            </BalanceValue>
+                        </BalanceStat>
+                        <BalanceDiv />
+                        <BalanceStat>
+                            <BalanceLabel>EURC in Wrapper</BalanceLabel>
+                            <BalanceValue $dim={statsLoading}>
+                                {statsLoading ? '···' : fmtSupply(eurcInWrapper)}
+                            </BalanceValue>
+                        </BalanceStat>
+                        <TopBarRefreshBtn onClick={fetchProtocolStats} title="Refresh protocol stats">
                             <RefreshCw size={13} />
                         </TopBarRefreshBtn>
                     </BalanceCluster>
@@ -166,7 +217,7 @@ const AppLayout = () => {
                             {shortAddr(address)}
                         </TopBarAddrPill>
                     ) : (
-                        <TopBarConnectBtn onClick={connect} disabled={connecting}>
+                        <TopBarConnectBtn ref={connectBtnRef} onClick={connect} disabled={connecting}>
                             {connecting ? 'Connecting…' : 'Connect wallet'}
                         </TopBarConnectBtn>
                     )}
@@ -204,7 +255,46 @@ const AppLayout = () => {
                     <Outlet />
                 </Main>
             </BodyRow>
+            {tourStep === 1 && spotRect && !connecting && (
+                spotRect.winW < 768 ? (
+                    <MobileTourOverlay>
+                        <MobileTourSheet>
+                            <TourStepPill>Step 1 of 4</TourStepPill>
+                            <TourTitle>Connect your wallet</TourTitle>
+                            <TourBody>
+                                Connect a self-custody wallet to get started. Koda works with MetaMask, Rabby, Coinbase Wallet, and any WalletConnect-compatible wallet.
+                            </TourBody>
+                            <MobileTourConnectBtn onClick={connect} disabled={connecting}>
+                                {connecting ? 'Connecting…' : 'Connect wallet'}
+                            </MobileTourConnectBtn>
+                            <TourSkip onClick={dismissTour}>Skip tutorial</TourSkip>
+                        </MobileTourSheet>
+                    </MobileTourOverlay>
+                ) : (
+                    <>
+                        <TourSpotlight style={{
+                            top:    spotRect.top    - 8,
+                            left:   spotRect.left   - 8,
+                            width:  spotRect.width  + 16,
+                            height: spotRect.height + 16,
+                        }} />
+                        <TourCard style={{
+                            top:   spotRect.bottom + 18,
+                            right: spotRect.winW - spotRect.right - 8,
+                        }}>
+                            <TourArrow />
+                            <TourStepPill>Step 1 of 4</TourStepPill>
+                            <TourTitle>Connect your wallet</TourTitle>
+                            <TourBody>
+                                Connect a self-custody wallet to get started. Koda works with MetaMask, Rabby, Coinbase Wallet, and any WalletConnect-compatible wallet.
+                            </TourBody>
+                            <TourSkip onClick={dismissTour}>Skip tutorial</TourSkip>
+                        </TourCard>
+                    </>
+                )
+            )}
         </Layout>
+        </TutorialContext.Provider>
     );
 };
 
@@ -323,6 +413,14 @@ const BalanceDiv = styled.div`
     height: 20px;
     background: rgba(255,255,255,0.08);
     flex-shrink: 0;
+`;
+
+const BalanceStackDiv = styled.div`
+    width: 1px;
+    height: 28px;
+    background: rgba(255,255,255,0.2);
+    flex-shrink: 0;
+    margin: 0 4px;
 `;
 
 const TopBarSep = styled.div`
@@ -715,5 +813,137 @@ const MobileUserRow = styled.div`
     padding: 6px 4px;
 `;
 
+
+// Tutorial overlay
+
+const spotPulse = keyframes`
+    0%, 100% { border-color: rgba(79,85,241,0.65); }
+    50%       { border-color: rgba(79,85,241,1); box-shadow: 0 0 0 9999px rgba(0,0,0,0.62), 0 0 18px rgba(79,85,241,0.25); }
+`;
+
+const tourFadeIn = keyframes`
+    from { opacity: 0; transform: translateY(-8px); }
+    to   { opacity: 1; transform: translateY(0); }
+`;
+
+const TourSpotlight = styled.div`
+    position: fixed;
+    border-radius: 12px;
+    border: 2px solid rgba(79,85,241,0.65);
+    box-shadow: 0 0 0 9999px rgba(0,0,0,0.62);
+    pointer-events: none;
+    z-index: 500;
+    animation: ${spotPulse} 2.2s ease infinite;
+`;
+
+const TourCard = styled.div`
+    position: fixed;
+    z-index: 501;
+    width: 288px;
+    background: #13131f;
+    border: 1px solid rgba(79,85,241,0.3);
+    border-radius: 18px;
+    padding: 20px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.7), 0 0 0 1px rgba(79,85,241,0.08) inset;
+    animation: ${tourFadeIn} 0.35s ease both;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+`;
+
+const TourArrow = styled.div`
+    position: absolute;
+    top: -7px;
+    right: 22px;
+    width: 12px;
+    height: 12px;
+    background: #13131f;
+    border-top: 1px solid rgba(79,85,241,0.3);
+    border-left: 1px solid rgba(79,85,241,0.3);
+    transform: rotate(45deg);
+`;
+
+const TourStepPill = styled.span`
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 10px;
+    border-radius: 20px;
+    background: rgba(79,85,241,0.12);
+    border: 1px solid rgba(79,85,241,0.28);
+    font-family: 'Google Sans Flex', sans-serif;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    color: #7b81f5;
+    align-self: flex-start;
+`;
+
+const TourTitle = styled.h3`
+    font-family: 'Saira', sans-serif;
+    font-size: 17px;
+    font-weight: 800;
+    color: #ffffff;
+    margin: 0;
+    letter-spacing: -0.3px;
+`;
+
+const TourBody = styled.p`
+    font-family: 'Google Sans Flex', sans-serif;
+    font-size: 13px;
+    color: rgba(255,255,255,0.5);
+    line-height: 1.65;
+    margin: 0;
+`;
+
+const TourSkip = styled.button`
+    background: none;
+    border: none;
+    padding: 0;
+    font-family: 'Google Sans Flex', sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    color: rgba(255,255,255,0.22);
+    cursor: pointer;
+    text-align: left;
+    transition: color 0.2s;
+    &:hover { color: rgba(255,255,255,0.55); }
+`;
+
+const MobileTourOverlay = styled.div`
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.75);
+    backdrop-filter: blur(6px);
+    z-index: 500;
+    display: flex;
+    align-items: flex-end;
+`;
+
+const MobileTourSheet = styled.div`
+    width: 100%;
+    background: #13131f;
+    border-top: 1px solid rgba(79,85,241,0.3);
+    border-radius: 24px 24px 0 0;
+    padding: 28px 24px calc(32px + env(safe-area-inset-bottom, 0px));
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    animation: ${tourFadeIn} 0.3s ease both;
+`;
+
+const MobileTourConnectBtn = styled.button`
+    padding: 14px;
+    background: #4F55F1;
+    color: #ffffff;
+    border: none;
+    border-radius: 12px;
+    font-family: 'Google Sans Flex', sans-serif;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: opacity 0.2s;
+    &:hover:not(:disabled) { opacity: 0.85; }
+    &:disabled { opacity: 0.5; cursor: not-allowed; }
+`;
 
 export default AppLayout;

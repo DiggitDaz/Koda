@@ -1,16 +1,16 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import styled, { keyframes } from "styled-components";
-import { Eye, EyeOff, AlertTriangle, ShieldCheck, Lock, Zap } from "lucide-react";
+import { Eye, EyeOff } from "lucide-react";
 import { useNavigate, Link } from "react-router-dom";
 import KODALOGO from '../assets/koda-logo.png';
-import LOGINBG from '../assets/login-join-bg.png';
-
-// Component
 
 const SignupPage = () => {
     const navigate = useNavigate();
 
-    const [agreed,       setAgreed]       = useState(false);
+    const [showWalletModal, setShowWalletModal] = useState(true);
+    const [showTip,      setShowTip]      = useState(() => !localStorage.getItem('koda_signup_tip_done'));
+    const formCardRef  = useRef(null);
+    const [cardRect,     setCardRect]     = useState(null);
     const [form,         setForm]         = useState({
         firstName: "", lastName: "", email: "",
         password: "", confirmPassword: "",
@@ -47,7 +47,7 @@ const SignupPage = () => {
         setLoading(true);
         setError("");
         try {
-            const res = await fetch("https://chainfree.site:7001/auth/signup", {
+            const res = await fetch(`${import.meta.env.VITE_AUTH_URL}/auth/signup`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -74,411 +74,457 @@ const SignupPage = () => {
         }
     };
 
+    const dismissWalletModal = () => {
+        setShowWalletModal(false);
+    };
+
+    const dismissTip = () => {
+        setShowTip(false);
+        localStorage.setItem('koda_signup_tip_done', '1');
+    };
+
+    useEffect(() => {
+        if (!showTip) return;
+        const measure = () => {
+            if (!formCardRef.current) return;
+            const r = formCardRef.current.getBoundingClientRect();
+            setCardRect({ top: r.top, left: r.left, right: r.right, width: r.width, height: r.height, bottom: r.bottom, winW: window.innerWidth });
+        };
+        const t = setTimeout(measure, 520);
+        window.addEventListener('resize', measure);
+        return () => { clearTimeout(t); window.removeEventListener('resize', measure); };
+    }, [showTip]);
+
     return (
+      <>
         <Page>
-            {/* Sandbox warning modal */}
-            {!agreed && (
-                <ModalOverlay>
-                    <WarningCard>
-                        <WarningIconWrap>
-                            <AlertTriangle size={28} />
-                        </WarningIconWrap>
-                        <WarningTitle>Test environment</WarningTitle>
-                        <WarningBody>
-                            Koda is running on <strong>Stripe Sandbox</strong> and <strong>Arc Testnet</strong>. This is a demonstration only, no real payments, no real money.
-                        </WarningBody>
-                        <WarningList>
-                            <WarningItem><ShieldCheck size={14} /><span>Use <strong>fictitious personal details</strong>, do not enter your real name, address or date of birth</span></WarningItem>
-                            <WarningItem><Lock size={14} /><span>Use a <strong>test email address</strong>, real emails are not required or verified</span></WarningItem>
-                            <WarningItem><Zap size={14} /><span>Card numbers will be <strong>Stripe test cards</strong> with no real financial data</span></WarningItem>
-                        </WarningList>
-                        <WarningBtn onClick={() => setAgreed(true)}>
-                            I understand, continue
-                        </WarningBtn>
-                        <WarningBack onClick={() => navigate('/')}>
-                            Go back
-                        </WarningBack>
-                    </WarningCard>
-                </ModalOverlay>
-            )}
+            <RainbowGlow />
 
-            {/* Left panel */}
-            <LeftPanel>
-                <PanelContent>
-                    <PanelLogo onClick={() => navigate('/')}>
-                        <img src={KODALOGO} alt="Koda" width={32} height={32} />
-                        <PanelLogoName>Koda</PanelLogoName>
-                    </PanelLogo>
-                    <PanelMain>
-                        <PanelEyebrow>Self-custody payments</PanelEyebrow>
-                        <PanelHeadline>
-                            Your wallet.<br />
-                            Your money.<br />
-                            <PanelAccent>Your card.</PanelAccent>
-                        </PanelHeadline>
-                        <PanelSub>
-                            Spend USDC directly from any wallet you choose. No custodian, no compromise, settled on-chain.
-                        </PanelSub>
-                        <PanelPerks>
-                            {[
-                                { icon: ShieldCheck, text: 'Your keys, always yours' },
-                                { icon: Zap,         text: 'On-chain settlement'     },
-                                { icon: Lock,        text: '1:1 USDC backed'         },
-                            ].map(({ icon: Icon, text }) => (
-                                <PanelPerk key={text}>
-                                    <PanelPerkIcon><Icon size={14} /></PanelPerkIcon>
-                                    <span>{text}</span>
-                                </PanelPerk>
-                            ))}
-                        </PanelPerks>
-                    </PanelMain>
-                    <PanelFooter>
-                        Already have an account?{' '}
-                        <PanelSignIn onClick={() => navigate('/login')}>Sign in</PanelSignIn>
-                    </PanelFooter>
-                </PanelContent>
-            </LeftPanel>
+            <FormCard ref={formCardRef}>
+                <DotPattern />
 
-            {/* Right panel */}
-            <RightPanel>
-                <FormCard>
-                    <FormHeader>
-                        <FormTitle>Create account</FormTitle>
-                        <FormSub>
-                            Join Koda and start spending from self-custody today.
-                        </FormSub>
-                    </FormHeader>
+                <CardLogo onClick={() => navigate('/')}>
+                    <img src={KODALOGO} alt="Koda" width={26} height={26} />
+                    <CardLogoName>koda</CardLogoName>
+                </CardLogo>
 
-                    {error && <ErrorBanner>{error}</ErrorBanner>}
+                <FormHeader>
+                    <FormTitle>Create account</FormTitle>
+                    <FormSub>Join Koda and start spending from self-custody today.</FormSub>
+                </FormHeader>
 
-                    <Form onSubmit={handleSubmit}>
-                        <FieldRow>
-                            <Field>
-                                <Label>First name</Label>
-                                <Input name="firstName" placeholder="Jane"
-                                    value={form.firstName} onChange={handleChange}
-                                    autoComplete="given-name" disabled={loading} />
-                            </Field>
-                            <Field>
-                                <Label>Last name</Label>
-                                <Input name="lastName" placeholder="Smith"
-                                    value={form.lastName} onChange={handleChange}
-                                    autoComplete="family-name" disabled={loading} />
-                            </Field>
-                        </FieldRow>
+                {error && <ErrorBanner>{error}</ErrorBanner>}
 
+                <Form onSubmit={handleSubmit}>
+                    <FieldRow>
                         <Field>
-                            <Label>Email address</Label>
-                            <Input name="email" type="email" placeholder="you@example.com"
-                                value={form.email} onChange={handleChange}
-                                autoComplete="email" disabled={loading} />
+                            <Label>First name</Label>
+                            <Input
+                                name="firstName"
+                                placeholder="Jane"
+                                value={form.firstName}
+                                onChange={handleChange}
+                                autoComplete="off"
+                                readOnly
+                                onFocus={e => e.target.removeAttribute('readonly')}
+                                disabled={loading}
+                            />
                         </Field>
-
                         <Field>
-                            <Label>Password</Label>
-                            <InputWrap>
-                                <Input name="password"
-                                    type={showPassword ? "text" : "password"}
-                                    placeholder="Min. 8 characters"
-                                    value={form.password} onChange={handleChange}
-                                    autoComplete="new-password" disabled={loading}
-                                    style={{ paddingRight: 44 }} />
-                                <EyeToggle type="button" onClick={() => setShowPassword(p => !p)} tabIndex={-1}>
-                                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                                </EyeToggle>
-                            </InputWrap>
+                            <Label>Last name</Label>
+                            <Input
+                                name="lastName"
+                                placeholder="Smith"
+                                value={form.lastName}
+                                onChange={handleChange}
+                                autoComplete="off"
+                                readOnly
+                                onFocus={e => e.target.removeAttribute('readonly')}
+                                disabled={loading}
+                            />
                         </Field>
+                    </FieldRow>
 
+                    <Field>
+                        <Label>Email address</Label>
+                        <Input
+                            name="email"
+                            type="email"
+                            placeholder="you@example.com"
+                            value={form.email}
+                            onChange={handleChange}
+                            autoComplete="off"
+                            readOnly
+                            onFocus={e => e.target.removeAttribute('readonly')}
+                            disabled={loading}
+                        />
+                    </Field>
+
+                    <Field>
+                        <Label>Password</Label>
+                        <InputWrap>
+                            <Input
+                                name="password"
+                                type={showPassword ? "text" : "password"}
+                                placeholder="Min. 8 characters"
+                                value={form.password}
+                                onChange={handleChange}
+                                autoComplete="new-password"
+                                readOnly
+                                onFocus={e => e.target.removeAttribute('readonly')}
+                                disabled={loading}
+                                style={{ paddingRight: 44 }}
+                            />
+                            <EyeToggle type="button" onClick={() => setShowPassword(p => !p)} tabIndex={-1}>
+                                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                            </EyeToggle>
+                        </InputWrap>
+                    </Field>
+
+                    <Field>
+                        <Label>Confirm password</Label>
+                        <InputWrap>
+                            <Input
+                                name="confirmPassword"
+                                type={showConfirm ? "text" : "password"}
+                                placeholder="Repeat your password"
+                                value={form.confirmPassword}
+                                onChange={handleChange}
+                                autoComplete="new-password"
+                                readOnly
+                                onFocus={e => e.target.removeAttribute('readonly')}
+                                disabled={loading}
+                                style={{ paddingRight: 44 }}
+                            />
+                            <EyeToggle type="button" onClick={() => setShowConfirm(p => !p)} tabIndex={-1}>
+                                {showConfirm ? <EyeOff size={16} /> : <Eye size={16} />}
+                            </EyeToggle>
+                        </InputWrap>
+                    </Field>
+
+                    <FieldRow>
                         <Field>
-                            <Label>Confirm password</Label>
-                            <InputWrap>
-                                <Input name="confirmPassword"
-                                    type={showConfirm ? "text" : "password"}
-                                    placeholder="Repeat your password"
-                                    value={form.confirmPassword} onChange={handleChange}
-                                    autoComplete="new-password" disabled={loading}
-                                    style={{ paddingRight: 44 }} />
-                                <EyeToggle type="button" onClick={() => setShowConfirm(p => !p)} tabIndex={-1}>
-                                    {showConfirm ? <EyeOff size={16} /> : <Eye size={16} />}
-                                </EyeToggle>
-                            </InputWrap>
+                            <Label>Phone <Optional>(optional)</Optional></Label>
+                            <Input
+                                name="phone"
+                                type="tel"
+                                placeholder="+44 7700 000000"
+                                value={form.phone}
+                                onChange={handleChange}
+                                autoComplete="off"
+                                readOnly
+                                onFocus={e => e.target.removeAttribute('readonly')}
+                                disabled={loading}
+                            />
                         </Field>
+                        <Field>
+                            <Label>Date of birth <Optional>(optional)</Optional></Label>
+                            <Input
+                                name="dateOfBirth"
+                                type="date"
+                                value={form.dateOfBirth}
+                                onChange={handleChange}
+                                disabled={loading}
+                            />
+                        </Field>
+                    </FieldRow>
 
-                        <FieldRow>
-                            <Field>
-                                <Label>Phone <Optional>(optional)</Optional></Label>
-                                <Input name="phone" type="tel" placeholder="+44 7700 000000"
-                                    value={form.phone} onChange={handleChange}
-                                    autoComplete="tel" disabled={loading} />
-                            </Field>
-                            <Field>
-                                <Label>Date of birth <Optional>(optional)</Optional></Label>
-                                <Input name="dateOfBirth" type="date"
-                                    value={form.dateOfBirth} onChange={handleChange}
-                                    disabled={loading} />
-                            </Field>
-                        </FieldRow>
+                    <CheckboxGroup>
+                        <CheckboxRow>
+                            <Checkbox name="newsletter" type="checkbox"
+                                checked={form.newsletter} onChange={handleChange}
+                                disabled={loading} />
+                            <CheckboxLabel>Send me product updates and news</CheckboxLabel>
+                        </CheckboxRow>
+                        <CheckboxRow>
+                            <Checkbox name="marketing" type="checkbox"
+                                checked={form.marketing} onChange={handleChange}
+                                disabled={loading} />
+                            <CheckboxLabel>Send me offers and promotions</CheckboxLabel>
+                        </CheckboxRow>
+                    </CheckboxGroup>
 
-                        <CheckboxGroup>
-                            <CheckboxRow>
-                                <Checkbox name="newsletter" type="checkbox"
-                                    checked={form.newsletter} onChange={handleChange}
-                                    disabled={loading} />
-                                <CheckboxLabel>Send me product updates and news</CheckboxLabel>
-                            </CheckboxRow>
-                            <CheckboxRow>
-                                <Checkbox name="marketing" type="checkbox"
-                                    checked={form.marketing} onChange={handleChange}
-                                    disabled={loading} />
-                                <CheckboxLabel>Send me offers and promotions</CheckboxLabel>
-                            </CheckboxRow>
-                        </CheckboxGroup>
+                    <Terms>
+                        By creating an account you agree to our{" "}
+                        <TermsLink to="/terms">Terms</TermsLink> and{" "}
+                        <TermsLink to="/privacy">Privacy Policy</TermsLink>.
+                    </Terms>
 
-                        <Terms>
-                            By creating an account you agree to our{" "}
-                            <TermsLink to="/terms">Terms</TermsLink> and{" "}
-                            <TermsLink to="/privacy">Privacy Policy</TermsLink>.
-                        </Terms>
+                    <SubmitBtn type="submit" disabled={loading}>
+                        {loading ? <Spinner /> : 'Create account'}
+                    </SubmitBtn>
 
-                        <SubmitBtn type="submit" disabled={loading}>
-                            {loading ? <Spinner /> : 'Create account'}
-                        </SubmitBtn>
-                    </Form>
-                </FormCard>
-            </RightPanel>
+                    <Divider><DividerLine /><DividerText>or</DividerText><DividerLine /></Divider>
+
+                    <SignInBtn type="button" onClick={() => navigate('/login')}>
+                        Sign in
+                    </SignInBtn>
+                </Form>
+            </FormCard>
         </Page>
+
+        {showWalletModal && (
+            <WalletModalOverlay>
+                <WalletModalCard>
+                    <WalletModalIconRow>
+                        <WalletModalIcon>🦊</WalletModalIcon>
+                    </WalletModalIconRow>
+                    <WalletModalPill>Wallet requirement</WalletModalPill>
+                    <WalletModalTitle>MetaMask required</WalletModalTitle>
+                    <WalletModalBody>
+                        Koda runs on <strong>Arc Testnet</strong>, a blockchain that uses <strong>USDC as its gas token</strong> instead of ETH. This is an unusual configuration that most wallets haven't added support for yet.
+                    </WalletModalBody>
+                    <WalletModalBody>
+                        Currently supported wallets:
+                    </WalletModalBody>
+                    <WalletModalOptions>
+                        <WalletModalOption>
+                            <WalletModalOptionDot />
+                            <span><strong>MetaMask</strong> browser extension (desktop)</span>
+                        </WalletModalOption>
+                        <WalletModalOption>
+                            <WalletModalOptionDot />
+                            <span><strong>MetaMask mobile app</strong> — scan the QR code when connecting</span>
+                        </WalletModalOption>
+                        <WalletModalOption>
+                            <WalletModalOptionDot />
+                            <span>Open inside <strong>MetaMask's in-app browser</strong> on mobile</span>
+                        </WalletModalOption>
+                    </WalletModalOptions>
+                    <WalletModalNote>
+                        We're working to add support for Rainbow, Rabby, and other wallets as Arc Testnet gains wider adoption.
+                    </WalletModalNote>
+                    <WalletModalBtn onClick={dismissWalletModal}>Got it, continue</WalletModalBtn>
+                </WalletModalCard>
+            </WalletModalOverlay>
+        )}
+
+        {showTip && cardRect && (() => {
+            const onRight = cardRect.winW >= 900 && (cardRect.winW - cardRect.right) >= 320;
+            const onLeft  = !onRight && cardRect.winW >= 900 && cardRect.left >= 320;
+            const tipTop  = (onRight || onLeft)
+                ? Math.max(8, cardRect.top + cardRect.height / 2 - 115)
+                : cardRect.bottom + 18;
+            const tipLeft = onRight
+                ? cardRect.right + 18
+                : onLeft
+                    ? cardRect.left - 306
+                    : Math.max(8, cardRect.left + cardRect.width / 2 - 144);
+            const arrowStyle = onRight
+                ? { left: -7, top: 'calc(50% - 6px)', right: 'auto', transform: 'rotate(-45deg)' }
+                : onLeft
+                    ? { left: 'auto', right: -7, top: 'calc(50% - 6px)', transform: 'rotate(135deg)' }
+                    : { left: 'calc(50% - 6px)', top: -7, right: 'auto' };
+            return (
+                <>
+                    <SignupSpotlight style={{
+                        top:    cardRect.top    - 10,
+                        left:   cardRect.left   - 10,
+                        width:  cardRect.width  + 20,
+                        height: cardRect.height + 20,
+                    }} />
+                    <SignupTipCard style={{ top: tipTop, left: tipLeft }}>
+                        <SignupTipArrow style={arrowStyle} />
+                        <SignupTipPill>Heads up</SignupTipPill>
+                        <SignupTipTitle>Use fictitious details</SignupTipTitle>
+                        <SignupTipBody>
+                            This is a testnet app. Please use a made-up name, email address, phone number and date of birth. Do not enter any real personal information.
+                        </SignupTipBody>
+                        <SignupTipBtn onClick={dismissTip}>Got it, continue</SignupTipBtn>
+                    </SignupTipCard>
+                </>
+            );
+        })()}
+      </>
     );
 };
 
-// Animations
-const fadeUp  = keyframes`from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}`;
-const fadeIn  = keyframes`from{opacity:0}to{opacity:1}`;
-const popIn   = keyframes`0%{opacity:0;transform:scale(0.94)}100%{opacity:1;transform:scale(1)}`;
-const spinAni = keyframes`to{transform:rotate(360deg)}`;
-
-// Page
-const Page = styled.div`
-    min-height: 100vh;
-    display: grid;
-    grid-template-columns: 480px 1fr;
-    font-family: 'Google Sans Flex', 'Sora', sans-serif;
-    background: #000000;
-
-    @media(max-width:1024px) { grid-template-columns: 400px 1fr; }
-    @media(max-width:768px)  { grid-template-columns: 1fr; }
+const fadeUp    = keyframes`from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}`;
+const spinAni   = keyframes`to{transform:rotate(360deg)}`;
+const spotPulse = keyframes`
+    0%, 100% { border-color: rgba(79,85,241,0.65); }
+    50%       { border-color: rgba(79,85,241,1); box-shadow: 0 0 0 9999px rgba(0,0,0,0.62), 0 0 18px rgba(79,85,241,0.25); }
+`;
+const tipFadeIn = keyframes`
+    from { opacity: 0; transform: translateY(-8px); }
+    to   { opacity: 1; transform: translateY(0); }
 `;
 
-// Warning modal
-const ModalOverlay = styled.div`
-    position: fixed;
-    inset: 0;
-    background: rgba(0,0,0,0.72);
-    backdrop-filter: blur(8px);
+const Page = styled.div`
+    min-height: 100vh;
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 24px;
-    z-index: 200;
-    animation: ${fadeIn} 0.2s ease;
+    padding: 16px 20px;
+    background: #0b0b0d;
+    font-family: 'Google Sans Flex', 'Sora', sans-serif;
+    position: relative;
+    overflow-x: hidden;
 `;
-const WarningCard = styled.div`
+
+const RainbowGlow = styled.div`
+    position: fixed;
+    bottom: -60px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 110%;
+    height: 280px;
+    background: linear-gradient(
+        90deg,
+        #ff4d4d,
+        #ff9f43,
+        #ffd43b,
+        #69db7c,
+        #4dabf7,
+        #748ffc,
+        #da77f2,
+        #ff6b9d
+    );
+    filter: blur(72px);
+    opacity: 0.22;
+    pointer-events: none;
+    z-index: 0;
+    border-radius: 50%;
+`;
+
+const SignupSpotlight = styled.div`
+    position: fixed;
+    border-radius: 28px;
+    border: 2px solid rgba(79,85,241,0.65);
+    box-shadow: 0 0 0 9999px rgba(0,0,0,0.62);
+    pointer-events: none;
+    z-index: 500;
+    animation: ${spotPulse} 2.2s ease infinite;
+`;
+
+const SignupTipCard = styled.div`
+    position: fixed;
+    z-index: 501;
+    width: 288px;
+    background: #13131f;
+    border: 1px solid rgba(79,85,241,0.3);
+    border-radius: 18px;
+    padding: 20px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.7), 0 0 0 1px rgba(79,85,241,0.08) inset;
+    animation: ${tipFadeIn} 0.35s ease both;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+`;
+
+const SignupTipArrow = styled.div`
+    position: absolute;
+    top: -7px;
+    width: 12px;
+    height: 12px;
+    background: #13131f;
+    border-top: 1px solid rgba(79,85,241,0.3);
+    border-left: 1px solid rgba(79,85,241,0.3);
+    transform: rotate(45deg);
+`;
+
+const SignupTipPill = styled.span`
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 10px;
+    border-radius: 20px;
+    background: rgba(79,85,241,0.12);
+    border: 1px solid rgba(79,85,241,0.28);
+    font-family: 'Google Sans Flex', sans-serif;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    color: #7b81f5;
+    align-self: flex-start;
+    text-transform: uppercase;
+`;
+
+const SignupTipTitle = styled.h3`
+    font-family: 'Saira', sans-serif;
+    font-size: 17px;
+    font-weight: 800;
+    color: #ffffff;
+    margin: 0;
+    letter-spacing: -0.3px;
+`;
+
+const SignupTipBody = styled.p`
+    font-family: 'Google Sans Flex', sans-serif;
+    font-size: 13px;
+    color: rgba(255,255,255,0.5);
+    line-height: 1.65;
+    margin: 0;
+`;
+
+const SignupTipBtn = styled.button`
+    padding: 10px 16px;
+    background: #4F55F1;
+    color: #ffffff;
+    border: none;
+    border-radius: 10px;
+    font-family: 'Google Sans Flex', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: opacity 0.2s ease;
+    &:hover { opacity: 0.85; }
+`;
+
+const FormCard = styled.div`
+    position: relative;
+    z-index: 1;
     width: 100%;
     max-width: 480px;
     background: linear-gradient(45deg, #ffffff05 40%, #121212);
     border: 1px solid rgba(255,255,255,0.1);
-    border-radius: 24px;
-    padding: 40px;
-    box-shadow: 0 8px 48px rgba(0,0,0,0.6);
-    animation: ${popIn} 0.3s ease;
-`;
-const WarningIconWrap = styled.div`
-    width: 56px; height: 56px;
-    border-radius: 16px;
-    background: rgba(79,85,241,0.1);
-    border: 1px solid rgba(79,85,241,0.25);
-    display: grid; place-items: center;
-    color: #7b81f5;
-    margin-bottom: 20px;
-`;
-const WarningTitle = styled.h2`
-    font-family: 'Saira', sans-serif;
-    font-size: 24px; font-weight: 800;
-    color: #ffffff; margin: 0 0 12px; letter-spacing: -0.5px;
-`;
-const WarningBody = styled.p`
-    font-family: 'Google Sans Flex', sans-serif;
-    font-size: 14px; color: rgba(255,255,255,0.5);
-    line-height: 1.7; margin: 0 0 24px;
-    strong { color: rgba(255,255,255,0.85); font-weight: 700; }
-`;
-const WarningList = styled.div`
-    display: flex; flex-direction: column; gap: 12px;
-    padding: 20px;
-    background: rgba(255,255,255,0.03);
-    border: 1px solid rgba(255,255,255,0.06);
-    border-radius: 14px; margin-bottom: 28px;
-`;
-const WarningItem = styled.div`
-    display: flex; align-items: flex-start; gap: 10px;
-    font-family: 'Google Sans Flex', sans-serif;
-    font-size: 13px; color: rgba(255,255,255,0.5); line-height: 1.5;
-    svg { color: #7b81f5; flex-shrink: 0; margin-top: 2px; }
-    strong { color: rgba(255,255,255,0.85); font-weight: 700; }
-`;
-const WarningBtn = styled.button`
-    width: 100%; padding: 15px;
-    background: #4F55F1; color: #ffffff; border: none; border-radius: 12px;
-    font-family: 'Google Sans Flex', sans-serif;
-    font-size: 15px; font-weight: 700; cursor: pointer; margin-bottom: 10px;
-    transition: opacity 0.2s ease, transform 0.2s ease;
-    &:hover { opacity: 0.85; transform: translateY(-1px); }
-`;
-const WarningBack = styled.button`
-    width: 100%; padding: 12px;
-    background: none; border: none;
-    font-family: 'Google Sans Flex', sans-serif;
-    font-size: 13px; font-weight: 600;
-    color: rgba(255,255,255,0.3); cursor: pointer;
-    transition: color 0.2s;
-    &:hover { color: rgba(255,255,255,0.7); }
-`;
-
-// Left panel
-const LeftPanel = styled.div`
-    position: relative;
+    border-radius: 25px;
+    padding: 28px 32px;
+    box-shadow: 0 24px 64px rgba(0,0,0,0.55), 0 1px 0 rgba(255,255,255,0.05) inset;
     overflow: hidden;
-    display: flex;
-    flex-direction: column;
-    min-height: 100vh;
-    background: linear-gradient(160deg, rgba(0,0,0,0.82) 0%, rgba(15,15,17,0.72) 100%),
-                url(${LOGINBG}) center center / cover no-repeat;
-    border-right: 1px solid rgba(255,255,255,0.07);
-
-    @media(max-width:768px) { display: none; }
-`;
-
-const PanelContent = styled.div`
-    position: relative;
-    z-index: 1;
-    display: flex;
-    flex-direction: column;
-    flex: 1;
-    padding: 40px;
-`;
-
-const PanelLogo = styled.button`
-    display: flex; align-items: center; gap: 10px;
-    background: none; border: none; cursor: pointer; padding: 0;
-    margin-bottom: 72px;
-`;
-
-const PanelLogoName = styled.span`
-    font-family: 'Saira', sans-serif;
-    font-size: 22px; font-weight: 700;
-    color: #ffffff; letter-spacing: -0.3px;
-`;
-
-const PanelMain = styled.div`flex: 1;`;
-
-const PanelEyebrow = styled.p`
-    font-family: 'Google Sans Flex', sans-serif;
-    font-size: 11px; font-weight: 700; letter-spacing: 1.5px;
-    text-transform: uppercase; color: rgba(255,255,255,0.4);
-    margin: 0 0 16px;
-`;
-
-const PanelHeadline = styled.h1`
-    font-family: 'Saira', sans-serif;
-    font-size: clamp(30px, 3.5vw, 46px);
-    font-weight: 800; color: #ffffff;
-    line-height: 1.1; letter-spacing: -1px;
-    margin: 0 0 20px;
-    animation: ${fadeUp} 0.7s ease both;
-`;
-
-const PanelAccent = styled.span`color: rgba(255,255,255,0.3);`;
-
-const PanelSub = styled.p`
-    font-family: 'Google Sans Flex', sans-serif;
-    font-size: 15px; color: rgba(255,255,255,0.55);
-    line-height: 1.7; margin: 0 0 40px; max-width: 340px;
-    animation: ${fadeUp} 0.7s ease 0.1s both;
-`;
-
-const PanelPerks = styled.div`
-    display: flex; flex-direction: column; gap: 14px;
-    animation: ${fadeUp} 0.7s ease 0.2s both;
-`;
-
-const PanelPerk = styled.div`
-    display: flex; align-items: center; gap: 10px;
-    font-family: 'Google Sans Flex', sans-serif;
-    font-size: 13px; font-weight: 600; color: rgba(255,255,255,0.55);
-`;
-
-const PanelPerkIcon = styled.div`
-    width: 28px; height: 28px; border-radius: 8px;
-    background: rgba(255,255,255,0.06);
-    border: 1px solid rgba(255,255,255,0.1);
-    display: grid; place-items: center; color: rgba(255,255,255,0.7); flex-shrink: 0;
-`;
-
-const PanelFooter = styled.p`
-    font-family: 'Google Sans Flex', sans-serif;
-    font-size: 13px; color: rgba(255,255,255,0.4);
-    margin: 40px 0 0;
-`;
-
-const PanelSignIn = styled.button`
-    background: none; border: none; padding: 0;
-    font-family: 'Google Sans Flex', sans-serif;
-    font-size: 13px; font-weight: 700;
-    color: #ffffff; cursor: pointer;
-    transition: opacity 0.2s;
-    &:hover { opacity: 0.6; }
-`;
-
-// Right panel
-const RightPanel = styled.div`
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 40px 32px;
-    overflow-y: auto;
-    background: #000000;
-
-    @media(max-width:768px) { padding: 40px 20px; }
-`;
-
-const FormCard = styled.div`
-    width: 100%;
-    max-width: 440px;
-    background: linear-gradient(45deg, #ffffff05 40%, #121212);
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 24px;
-    padding: 40px;
-    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
     animation: ${fadeUp} 0.5s ease both;
 
-    @media(max-width:480px) { padding: 28px 20px; border-radius: 20px; }
+    @media(max-width:480px) { padding: 20px 18px; border-radius: 20px; }
 `;
 
-const FormHeader = styled.div`margin-bottom: 28px;`;
+const DotPattern = styled.div`
+    position: absolute;
+    inset: 0;
+    background-image: radial-gradient(rgba(255,255,255,0.045) 1px, transparent 1px);
+    background-size: 24px 24px;
+    pointer-events: none;
+    border-radius: inherit;
+`;
+
+const CardLogo = styled.button`
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    margin-bottom: 16px;
+`;
+
+const CardLogoName = styled.span`
+    font-family: 'Saira', sans-serif;
+    font-size: 20px;
+    font-weight: 700;
+    color: #ffffff;
+    letter-spacing: -0.3px;
+`;
+
+const FormHeader = styled.div`margin-bottom: 14px;`;
 
 const FormTitle = styled.h2`
     font-family: 'Saira', sans-serif;
-    font-size: 26px; font-weight: 800;
-    color: #ffffff; margin: 0 0 6px; letter-spacing: -0.5px;
+    font-size: 22px; font-weight: 800;
+    color: #ffffff; margin: 0 0 4px; letter-spacing: -0.5px;
 `;
 
 const FormSub = styled.p`
     font-family: 'Google Sans Flex', sans-serif;
-    font-size: 14px; color: rgba(255,255,255,0.45); margin: 0;
-`;
-
-const FormLink = styled(Link)`
-    color: rgba(255,255,255,0.7); font-weight: 700; text-decoration: none;
-    &:hover { color: #ffffff; text-decoration: underline; }
+    font-size: 13px; color: rgba(255,255,255,0.45); margin: 0;
 `;
 
 const ErrorBanner = styled.div`
@@ -490,19 +536,19 @@ const ErrorBanner = styled.div`
 `;
 
 const Form = styled.form`
-    display: flex; flex-direction: column; gap: 14px;
+    display: flex; flex-direction: column; gap: 9px;
 `;
 
 const FieldRow = styled.div`
-    display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
     @media(max-width:480px) { grid-template-columns: 1fr; }
 `;
 
-const Field = styled.div`display: flex; flex-direction: column; gap: 5px;`;
+const Field = styled.div`display: flex; flex-direction: column; gap: 3px;`;
 
 const Label = styled.label`
     font-family: 'Google Sans Flex', sans-serif;
-    font-size: 12px; font-weight: 600;
+    font-size: 11px; font-weight: 600;
     color: rgba(255,255,255,0.45); letter-spacing: 0.1px;
 `;
 
@@ -511,12 +557,12 @@ const Optional = styled.span`font-weight: 400; color: rgba(255,255,255,0.25);`;
 const InputWrap = styled.div`position: relative;`;
 
 const Input = styled.input`
-    width: 100%; padding: 11px 14px;
+    width: 100%; padding: 8px 12px;
     background: rgba(255,255,255,0.04);
     border: 1.5px solid rgba(255,255,255,0.08);
     border-radius: 10px;
     font-family: 'Google Sans Flex', 'Sora', sans-serif;
-    font-size: 14px; color: #ffffff;
+    font-size: 13px; color: #ffffff;
     outline: none; box-sizing: border-box;
     transition: border-color 0.15s;
     color-scheme: dark;
@@ -524,6 +570,16 @@ const Input = styled.input`
     &::placeholder { color: rgba(255,255,255,0.25); }
     &:focus { border-color: rgba(79,85,241,0.55); }
     &:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    &:-webkit-autofill,
+    &:-webkit-autofill:hover,
+    &:-webkit-autofill:focus {
+        -webkit-box-shadow: 0 0 0px 1000px #111114 inset;
+        -webkit-text-fill-color: #ffffff;
+        caret-color: #ffffff;
+        border-color: rgba(255,255,255,0.08);
+        transition: background-color 5000s ease-in-out 0s;
+    }
 `;
 
 const EyeToggle = styled.button`
@@ -536,24 +592,24 @@ const EyeToggle = styled.button`
     &:hover { color: rgba(255,255,255,0.75); }
 `;
 
-const CheckboxGroup = styled.div`display: flex; flex-direction: column; gap: 10px; padding-top: 4px;`;
+const CheckboxGroup = styled.div`display: flex; flex-direction: column; gap: 6px; padding-top: 2px;`;
 
-const CheckboxRow = styled.div`display: flex; align-items: center; gap: 10px;`;
+const CheckboxRow = styled.div`display: flex; align-items: center; gap: 8px;`;
 
 const Checkbox = styled.input`
-    width: 16px; height: 16px; accent-color: #4F55F1;
+    width: 14px; height: 14px; accent-color: #4F55F1;
     cursor: pointer; flex-shrink: 0;
 `;
 
 const CheckboxLabel = styled.span`
     font-family: 'Google Sans Flex', sans-serif;
-    font-size: 13px; color: rgba(255,255,255,0.5);
+    font-size: 12px; color: rgba(255,255,255,0.5);
 `;
 
 const Terms = styled.p`
     font-family: 'Google Sans Flex', sans-serif;
-    font-size: 12px; color: rgba(255,255,255,0.35);
-    line-height: 1.6; margin: 0;
+    font-size: 11px; color: rgba(255,255,255,0.35);
+    line-height: 1.5; margin: 0;
 `;
 
 const TermsLink = styled(Link)`
@@ -563,15 +619,50 @@ const TermsLink = styled(Link)`
 `;
 
 const SubmitBtn = styled.button`
-    padding: 14px;
+    padding: 11px;
     background: #4F55F1; color: #ffffff; border: none; border-radius: 12px;
     font-family: 'Google Sans Flex', sans-serif;
-    font-size: 15px; font-weight: 700; cursor: pointer;
-    margin-top: 4px; display: flex; align-items: center;
+    font-size: 14px; font-weight: 700; cursor: pointer;
+    margin-top: 2px; display: flex; align-items: center;
     justify-content: center; gap: 8px;
-    transition: opacity 0.2s ease, transform 0.2s ease;
+    transition: opacity 0.2s ease, transform 0.15s ease;
     &:hover:not(:disabled) { opacity: 0.85; transform: translateY(-1px); }
     &:disabled { opacity: 0.5; cursor: not-allowed; }
+`;
+
+const Divider = styled.div`
+    display: flex;
+    align-items: center;
+    gap: 12px;
+`;
+
+const DividerLine = styled.div`
+    flex: 1;
+    height: 1px;
+    background: rgba(255,255,255,0.07);
+`;
+
+const DividerText = styled.span`
+    font-family: 'Google Sans Flex', sans-serif;
+    font-size: 12px;
+    color: rgba(255,255,255,0.25);
+`;
+
+const SignInBtn = styled.button`
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 10px;
+    background: transparent;
+    color: rgba(255,255,255,0.75);
+    border: 1.5px solid rgba(255,255,255,0.1);
+    border-radius: 12px;
+    font-family: 'Google Sans Flex', sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: border-color 0.2s ease, color 0.2s ease, transform 0.15s ease;
+    &:hover { border-color: rgba(255,255,255,0.25); color: #ffffff; transform: translateY(-1px); }
 `;
 
 const Spinner = styled.div`
@@ -579,6 +670,141 @@ const Spinner = styled.div`
     border: 2px solid rgba(255,255,255,0.3);
     border-top-color: #fff; border-radius: 50%;
     animation: ${spinAni} 0.7s linear infinite;
+`;
+
+// Wallet requirement modal
+
+const walletModalFadeIn = keyframes`
+    from { opacity: 0; transform: translateY(10px) scale(0.98); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+`;
+
+const WalletModalOverlay = styled.div`
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.72);
+    backdrop-filter: blur(6px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    z-index: 900;
+`;
+
+const WalletModalCard = styled.div`
+    width: 100%;
+    max-width: 420px;
+    background: linear-gradient(45deg, #000000ff 20%, #121212);
+    border-radius: 24px;
+    padding: 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    box-shadow: 0 24px 64px rgba(0,0,0,0.7);
+    animation: ${walletModalFadeIn} 0.3s ease both;
+
+    @media (max-width: 480px) { border-radius: 20px; padding: 22px 20px; }
+`;
+
+const WalletModalIconRow = styled.div`
+    display: flex;
+    justify-content: center;
+    margin-bottom: 4px;
+`;
+
+const WalletModalIcon = styled.div`
+    font-size: 40px;
+    line-height: 1;
+`;
+
+const WalletModalPill = styled.span`
+    display: inline-flex;
+    align-self: center;
+    padding: 3px 10px;
+    border-radius: 20px;
+    background: rgba(79,85,241,0.12);
+    border: 1px solid rgba(79,85,241,0.28);
+    font-family: 'Google Sans Flex', sans-serif;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    color: #7b81f5;
+    text-transform: uppercase;
+`;
+
+const WalletModalTitle = styled.h3`
+    font-family: 'Saira', sans-serif;
+    font-size: 22px;
+    font-weight: 800;
+    color: #ffffff;
+    margin: 0;
+    text-align: center;
+    letter-spacing: -0.3px;
+`;
+
+const WalletModalBody = styled.p`
+    font-family: 'Google Sans Flex', sans-serif;
+    font-size: 13px;
+    color: rgba(255,255,255,0.5);
+    line-height: 1.65;
+    margin: 0;
+
+    strong { color: rgba(255,255,255,0.85); font-weight: 600; }
+`;
+
+const WalletModalOptions = styled.div`
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 14px;
+    padding: 14px 16px;
+`;
+
+const WalletModalOption = styled.div`
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    font-family: 'Google Sans Flex', sans-serif;
+    font-size: 12.5px;
+    color: rgba(255,255,255,0.55);
+    line-height: 1.5;
+
+    strong { color: rgba(255,255,255,0.85); font-weight: 600; }
+`;
+
+const WalletModalOptionDot = styled.div`
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #4F55F1;
+    flex-shrink: 0;
+    margin-top: 5px;
+`;
+
+const WalletModalNote = styled.p`
+    font-family: 'Google Sans Flex', sans-serif;
+    font-size: 11px;
+    color: rgba(255,255,255,0.25);
+    line-height: 1.6;
+    margin: 0;
+    text-align: center;
+`;
+
+const WalletModalBtn = styled.button`
+    padding: 13px;
+    background: #4F55F1;
+    color: #ffffff;
+    border: none;
+    border-radius: 12px;
+    font-family: 'Google Sans Flex', sans-serif;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    margin-top: 4px;
+    transition: opacity 0.2s ease;
+    &:hover { opacity: 0.85; }
 `;
 
 export default SignupPage;

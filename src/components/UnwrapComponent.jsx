@@ -2,18 +2,33 @@ import { useState, useEffect } from "react";
 import styled, { keyframes } from "styled-components";
 import { ArrowDown, Check, AlertCircle, X } from "lucide-react";
 import { ethers } from "ethers";
-import { arcProvider, arcSend, ARC_RPC_PROXY } from "../lib/arcRpc.js";
+import { arcSend, ARC_RPC_PROXY } from "../lib/arcRpc.js";
 
-const TAPUSDC_ADDRESS = "0xCb96C70be34cd6484e69D1BEd5ad2F22602191e3";
-const USDC_ADDRESS    = "0x3600000000000000000000000000000000000000";
-const WRAPPER_ADDRESS = "0x9D845625eb0010F9a63213240Da722424C684DCf";
+const PAIRS = {
+    USD: {
+        taptoken:    '0xCb96C70be34cd6484e69D1BEd5ad2F22602191e3',
+        wrapper:     '0x9D845625eb0010F9a63213240Da722424C684DCf',
+        stablecoin:  '0x3600000000000000000000000000000000000000',
+        tapLabel:    'TAPUSDC',
+        stableLabel: 'USDC',
+        rate:        '1 TAPUSDC = 1 USDC',
+    },
+    EUR: {
+        taptoken:    '0x36247A653A1253A96a286f5E296c06fF958b1ac0',
+        wrapper:     '0x72d038055795631c057a3DA26c37EACa92Cb9AdB',
+        stablecoin:  '0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a',
+        tapLabel:    'TAPEURC',
+        stableLabel: 'EURC',
+        rate:        '1 TAPEURC = 1 EURC',
+    },
+};
 
 const ERC20_ABI = [
-    "function balanceOf(address) view returns (uint256)",
-    "function allowance(address owner, address spender) view returns (uint256)",
-    "function approve(address spender, uint256 amount) returns (bool)",
+    'function balanceOf(address) view returns (uint256)',
+    'function allowance(address owner, address spender) view returns (uint256)',
+    'function approve(address spender, uint256 amount) returns (bool)',
 ];
-
+const WRAPPER_ABI = ['function withdraw(uint256 amount) external'];
 const ERC20_IFACE = new ethers.Interface(ERC20_ABI);
 
 async function readBalance(tokenAddress, walletAddress) {
@@ -25,65 +40,87 @@ async function readBalance(tokenAddress, walletAddress) {
     } catch { return 0n; }
 }
 
-const WRAPPER_ABI = [
-    "function withdraw(uint256 amount) external",
-];
+async function readAllowance(tokenAddress, owner, spender) {
+    const data = ERC20_IFACE.encodeFunctionData('allowance', [owner, spender]);
+    try {
+        const result = await arcSend('eth_call', [{ to: tokenAddress, data }, 'latest']);
+        if (!result || result === '0x') return 0n;
+        return ERC20_IFACE.decodeFunctionResult('allowance', result)[0];
+    } catch { return 0n; }
+}
 
 const UnwrapComponent = ({ connector, walletAddress, onClose, onSuccess }) => {
-    const [amount,         setAmount]         = useState("");
-    const [tapusdcBalance, setTapusdcBalance] = useState("0");
-    const [usdcBalance,    setUsdcBalance]    = useState("0");
-    const [loading,        setLoading]        = useState(false);
-    const [status,         setStatus]         = useState(null);
-    const [error,          setError]          = useState("");
-    const [txHash,         setTxHash]         = useState("");
+    const initPair = localStorage.getItem('kodaCurrency') === 'TAPEURC' ? 'EUR' : 'USD';
+
+    const [pair,         setPair]         = useState(initPair);
+    const [amount,       setAmount]       = useState('');
+    const [tapBalance,   setTapBalance]   = useState('0');
+    const [stableBalance,setStableBalance]= useState('0');
+    const [loading,      setLoading]      = useState(false);
+    const [status,       setStatus]       = useState(null);
+    const [error,        setError]        = useState('');
+    const [txHash,       setTxHash]       = useState('');
+
+    const cfg = PAIRS[pair];
 
     useEffect(() => {
         if (!walletAddress) return;
-        const fetchBalances = async () => {
-            const [tBal, uBal] = await Promise.all([
-                readBalance(TAPUSDC_ADDRESS, walletAddress),
-                readBalance(USDC_ADDRESS,    walletAddress),
+        setTapBalance('0');
+        setStableBalance('0');
+        (async () => {
+            const [tBal, sBal] = await Promise.all([
+                readBalance(cfg.taptoken,   walletAddress),
+                readBalance(cfg.stablecoin, walletAddress),
             ]);
-            setTapusdcBalance(ethers.formatUnits(tBal, 6));
-            setUsdcBalance(ethers.formatUnits(uBal, 6));
-        };
-        fetchBalances();
-    }, [walletAddress, status]);
+            setTapBalance(ethers.formatUnits(tBal, 6));
+            setStableBalance(ethers.formatUnits(sBal, 6));
+        })();
+    }, [walletAddress, pair]);
 
-    const handleMax = () => { setAmount(tapusdcBalance); setError(""); };
+    const switchPair = (p) => {
+        setPair(p);
+        setAmount('');
+        setStatus(null);
+        setError('');
+        setTxHash('');
+    };
+
+    const handleMax = () => { setAmount(tapBalance); setError(''); };
 
     const formatDisplay = (val) => {
         const n = parseFloat(val);
-        if (isNaN(n)) return "0.00";
-        return n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 });
+        if (isNaN(n)) return '0.00';
+        return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 });
     };
 
     const handleUnwrap = async () => {
-        if (!amount || parseFloat(amount) <= 0) { setError("Enter an amount"); return; }
-        if (parseFloat(amount) > parseFloat(tapusdcBalance)) { setError("Insufficient TAPUSDC balance"); return; }
+        if (!amount || parseFloat(amount) <= 0) { setError('Enter an amount'); return; }
+        if (parseFloat(amount) > parseFloat(tapBalance)) {
+            setError(`Insufficient ${cfg.tapLabel} balance`);
+            return;
+        }
 
         setLoading(true);
-        setError("");
+        setError('');
         setStatus(null);
 
         try {
             try {
                 await connector.provider.request({
-                    method: "wallet_addEthereumChain",
+                    method: 'wallet_addEthereumChain',
                     params: [{
-                        chainId: "0x4CEF52",
-                        chainName: "Arc Testnet",
+                        chainId: '0x4CEF52',
+                        chainName: 'Arc Testnet',
                         rpcUrls: [ARC_RPC_PROXY],
-                        nativeCurrency: { name: "USDC", symbol: "USDC", decimals: 18 },
-                        blockExplorerUrls: ["https://testnet.arcscan.app"],
+                        nativeCurrency: { name: 'USDC', symbol: 'USDC', decimals: 18 },
+                        blockExplorerUrls: [import.meta.env.VITE_EXPLORER_URL],
                     }],
                 });
             } catch {
                 try {
                     await connector.provider.request({
-                        method: "wallet_switchEthereumChain",
-                        params: [{ chainId: "0x4CEF52" }],
+                        method: 'wallet_switchEthereumChain',
+                        params: [{ chainId: '0x4CEF52' }],
                     });
                 } catch { /* already on chain */ }
             }
@@ -92,33 +129,29 @@ const UnwrapComponent = ({ connector, walletAddress, onClose, onSuccess }) => {
             const signer       = await provider.getSigner();
             const parsedAmount = ethers.parseUnits(amount, 6);
 
-            const gasPriceHex  = await arcSend("eth_gasPrice", []);
+            const gasPriceHex = await arcSend('eth_gasPrice', []);
             const txOverrides  = { gasPrice: BigInt(gasPriceHex), gasLimit: 200000n };
 
-            const tapusdcRead  = new ethers.Contract(TAPUSDC_ADDRESS, ERC20_ABI, arcProvider);
-            const allowance    = await tapusdcRead.allowance(walletAddress, WRAPPER_ADDRESS);
-
+            const allowance = await readAllowance(cfg.taptoken, walletAddress, cfg.wrapper);
             if (allowance < parsedAmount) {
-                setStatus("approving");
-                const tapusdcWrite = new ethers.Contract(TAPUSDC_ADDRESS, ERC20_ABI, signer);
-                const approveTx    = await tapusdcWrite.approve(WRAPPER_ADDRESS, parsedAmount, txOverrides);
+                setStatus('approving');
+                const tapWrite  = new ethers.Contract(cfg.taptoken, ERC20_ABI, signer);
+                const approveTx = await tapWrite.approve(cfg.wrapper, parsedAmount, txOverrides);
                 await approveTx.wait();
             }
 
-            setStatus("unwrapping");
-            const wrapper    = new ethers.Contract(WRAPPER_ADDRESS, WRAPPER_ABI, signer);
+            setStatus('unwrapping');
+            const wrapper    = new ethers.Contract(cfg.wrapper, WRAPPER_ABI, signer);
             const withdrawTx = await wrapper.withdraw(parsedAmount, txOverrides);
             const receipt    = await withdrawTx.wait();
 
             setTxHash(receipt.hash);
-            setStatus("success");
-            setAmount("");
-
+            setStatus('success');
+            setAmount('');
             if (onSuccess) onSuccess();
         } catch (err) {
-            console.error("UNWRAP ERROR:", err);
-            setError(err.reason || err.shortMessage || err.message || "Transaction failed");
-            setStatus("error");
+            setError(err.reason || err.shortMessage || err.message || 'Transaction failed');
+            setStatus('error');
         } finally {
             setLoading(false);
         }
@@ -128,18 +161,24 @@ const UnwrapComponent = ({ connector, walletAddress, onClose, onSuccess }) => {
         <Overlay>
             <Card>
                 <CardHeader>
-                    <CardTitle>Unwrap TAPUSDC</CardTitle>
-                    {onClose && (
-                        <CloseBtn onClick={onClose}><X size={18} /></CloseBtn>
-                    )}
+                    <CardTitle>Unwrap</CardTitle>
+                    {onClose && <CloseBtn onClick={onClose}><X size={18} /></CloseBtn>}
                 </CardHeader>
 
-                {/* You pay — TAPUSDC */}
+                <PairToggle>
+                    <PairOpt $active={pair === 'USD'} onClick={() => switchPair('USD')} disabled={loading}>
+                        TAPUSDC
+                    </PairOpt>
+                    <PairOpt $active={pair === 'EUR'} onClick={() => switchPair('EUR')} disabled={loading}>
+                        TAPEURC
+                    </PairOpt>
+                </PairToggle>
+
                 <TokenBox>
                     <TokenLabel>
                         <span>You pay</span>
                         <BalanceText onClick={handleMax}>
-                            Balance: {formatDisplay(tapusdcBalance)}
+                            Balance: {formatDisplay(tapBalance)}
                         </BalanceText>
                     </TokenLabel>
                     <TokenRow>
@@ -147,10 +186,10 @@ const UnwrapComponent = ({ connector, walletAddress, onClose, onSuccess }) => {
                             type="number"
                             placeholder="0.00"
                             value={amount}
-                            onChange={(e) => { setAmount(e.target.value); setError(""); }}
+                            onChange={(e) => { setAmount(e.target.value); setError(''); }}
                             disabled={loading}
                         />
-                        <TokenBadge $accent>TAPUSDC</TokenBadge>
+                        <TokenBadge $accent>{cfg.tapLabel}</TokenBadge>
                     </TokenRow>
                 </TokenBox>
 
@@ -158,21 +197,20 @@ const UnwrapComponent = ({ connector, walletAddress, onClose, onSuccess }) => {
                     <ArrowCircle><ArrowDown size={16} /></ArrowCircle>
                 </ArrowWrap>
 
-                {/* You receive — USDC */}
                 <TokenBox>
                     <TokenLabel>
                         <span>You receive</span>
-                        <BalanceText>Balance: {formatDisplay(usdcBalance)}</BalanceText>
+                        <BalanceText>Balance: {formatDisplay(stableBalance)}</BalanceText>
                     </TokenLabel>
                     <TokenRow>
                         <AmountDisplay>
-                            {amount && parseFloat(amount) > 0 ? formatDisplay(amount) : "0.00"}
+                            {amount && parseFloat(amount) > 0 ? formatDisplay(amount) : '0.00'}
                         </AmountDisplay>
-                        <TokenBadge>USDC</TokenBadge>
+                        <TokenBadge>{cfg.stableLabel}</TokenBadge>
                     </TokenRow>
                 </TokenBox>
 
-                <InfoRow><InfoLabel>Rate</InfoLabel><InfoValue>1 TAPUSDC = 1 USDC</InfoValue></InfoRow>
+                <InfoRow><InfoLabel>Rate</InfoLabel><InfoValue>{cfg.rate}</InfoValue></InfoRow>
                 <InfoRow><InfoLabel>Fee</InfoLabel><InfoValue>None</InfoValue></InfoRow>
                 <InfoRow><InfoLabel>Network</InfoLabel><InfoValue>Arc Testnet</InfoValue></InfoRow>
 
@@ -180,14 +218,18 @@ const UnwrapComponent = ({ connector, walletAddress, onClose, onSuccess }) => {
                     <ErrorBox><AlertCircle size={14} /><span>{error}</span></ErrorBox>
                 )}
 
-                {status === "success" && (
+                {status === 'success' && (
                     <SuccessBox>
                         <Check size={14} />
                         <span>
                             Unwrapped successfully
                             {txHash && (
-                                <TxLink href={`https://testnet.arcscan.app/tx/${txHash}`} target="_blank" rel="noopener noreferrer">
-                                    {" "}View tx
+                                <TxLink
+                                    href={`${import.meta.env.VITE_EXPLORER_URL}/tx/${txHash}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                >
+                                    {' '}View tx
                                 </TxLink>
                             )}
                         </span>
@@ -195,26 +237,30 @@ const UnwrapComponent = ({ connector, walletAddress, onClose, onSuccess }) => {
                 )}
 
                 <UnwrapBtn onClick={handleUnwrap} disabled={loading || !amount || parseFloat(amount) <= 0}>
-                    {status === "approving"  && <><Spinner /> Approving TAPUSDC...</>}
-                    {status === "unwrapping" && <><Spinner /> Unwrapping...</>}
-                    {status === "success"    && <>Unwrap again</>}
-                    {status === "error"      && <>Try again</>}
-                    {!status                 && <>Unwrap TAPUSDC</>}
+                    {status === 'approving'  && <><Spinner /> Approving {cfg.tapLabel}…</>}
+                    {status === 'unwrapping' && <><Spinner /> Unwrapping…</>}
+                    {status === 'success'    && <>Unwrap again</>}
+                    {status === 'error'      && <>Try again</>}
+                    {!status                && <>Unwrap {cfg.tapLabel}</>}
                 </UnwrapBtn>
 
                 <Disclaimer>
-                    TAPUSDC is burned 1:1 and USDC is returned from the wrapper contract reserves.
+                    {cfg.tapLabel} is burned 1:1 and {cfg.stableLabel} is returned from the wrapper contract reserves.
                 </Disclaimer>
             </Card>
         </Overlay>
     );
 };
 
+// Animations
+
 const fadeIn = keyframes`
     from { opacity: 0; transform: translateY(8px); }
     to   { opacity: 1; transform: translateY(0); }
 `;
 const spin = keyframes`to { transform: rotate(360deg); }`;
+
+// Layout
 
 const Overlay = styled.div`
     position: fixed;
@@ -230,6 +276,7 @@ const Overlay = styled.div`
     @media (max-width: 768px) {
         align-items: flex-start;
         padding: 16px;
+        overflow-y: auto;
     }
 `;
 
@@ -248,7 +295,7 @@ const CardHeader = styled.div`
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 20px;
+    margin-bottom: 16px;
 `;
 
 const CardTitle = styled.h3`
@@ -269,9 +316,53 @@ const CloseBtn = styled.button`
     display: grid;
     place-items: center;
     cursor: pointer;
-    transition: border-color 0.2s ease, color 0.2s ease;
+    transition: opacity 0.15s;
     &:hover { opacity: 0.7; }
 `;
+
+// Pair toggle
+
+const PairToggle = styled.div`
+    display: flex;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 10px;
+    padding: 3px;
+    gap: 3px;
+    margin-bottom: 16px;
+`;
+
+const PairOpt = styled.button`
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 8px 12px;
+    border: none;
+    border-radius: 8px;
+    font-family: 'Google Sans Flex', 'Sora', sans-serif;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.2px;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+    background: ${p => p.$active ? 'rgba(255,255,255,0.1)' : 'transparent'};
+    color: ${p => p.$active ? '#ffffff' : 'rgba(255,255,255,0.35)'};
+    &:hover:not(:disabled) { color: ${p => p.$active ? '#ffffff' : 'rgba(255,255,255,0.65)'}; }
+    &:disabled { cursor: default; }
+`;
+
+const PairDot = styled.span`
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    background: ${p => p.$active ? '#4F55F1' : 'rgba(255,255,255,0.15)'};
+    transition: background 0.15s;
+`;
+
+// Token boxes
 
 const TokenBox = styled.div`
     background: rgba(255, 255, 255, 0.1);
@@ -287,7 +378,7 @@ const TokenLabel = styled.div`
     margin-bottom: 10px;
     font-size: 12px;
     color: #8D969E;
-    font-family: Google Sans Flex, Sans serif;
+    font-family: 'Google Sans Flex', sans-serif;
     font-weight: 500;
 `;
 
@@ -313,10 +404,7 @@ const AmountInput = styled.input`
     &::placeholder { color: #8D969E50; }
     &:disabled { opacity: 0.5; }
     &::-webkit-inner-spin-button,
-    &::-webkit-outer-spin-button {
-        -webkit-appearance: none;
-        margin: 0;
-    }
+    &::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
     -moz-appearance: textfield;
 `;
 
@@ -357,6 +445,8 @@ const ArrowCircle = styled.div`
     place-items: center;
 `;
 
+// Info rows
+
 const InfoRow = styled.div`
     display: flex;
     align-items: center;
@@ -369,6 +459,8 @@ const InfoRow = styled.div`
 
 const InfoLabel = styled.span`font-size: 12px; color: #8D969E;`;
 const InfoValue = styled.span`font-size: 12px; font-weight: 800; color: #fff;`;
+
+// Feedback
 
 const ErrorBox = styled.div`
     display: flex;
@@ -420,10 +512,7 @@ const UnwrapBtn = styled.button`
     cursor: pointer;
     margin-top: 16px;
     transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
-    &:hover:not(:disabled) {
-        transform: translateY(-1px);
-        box-shadow: 0 6px 20px rgba(9, 0, 34, 0.15);
-    }
+    &:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(9, 0, 34, 0.15); }
     &:disabled { opacity: 0.5; cursor: not-allowed; }
 `;
 
@@ -438,7 +527,7 @@ const Spinner = styled.div`
 
 const Disclaimer = styled.p`
     font-size: 11px;
-    color: #0f0f1180;
+    color: #8D969E80;
     text-align: center;
     margin: 12px 0 0;
     line-height: 1.5;

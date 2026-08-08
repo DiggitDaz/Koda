@@ -1,10 +1,14 @@
+import { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext.js';
 import { WalletProvider } from './context/WalletContext.js';
 import Home from './pages/Home.jsx';
+import BusinessHome from './pages/BusinessHome.jsx';
+import WidgetPage from './pages/WidgetPage.jsx';
 import SignupPage from './pages/SignupPage.jsx';
 import LoginPage from './pages/LoginPage.jsx';
 import DashboardPage from './pages/DashboardPage.jsx';
+import MobileDashboardPage from './pages/MobileDashboardPage.jsx';
 import WalletPage from './pages/WalletPage.jsx';
 import PaymentsPage from './pages/PaymentsPage.jsx';
 import SubscriptionsPage from './pages/SubscriptionsPage.jsx';
@@ -32,6 +36,16 @@ const ProtectedRoute = () => {
     return <Outlet />;
 };
 
+const DashboardRoute = () => {
+    const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
+    useEffect(() => {
+        const handler = () => setIsMobile(window.innerWidth < 768);
+        window.addEventListener('resize', handler);
+        return () => window.removeEventListener('resize', handler);
+    }, []);
+    return isMobile ? <MobileDashboardPage /> : <DashboardPage />;
+};
+
 // Redirects authenticated users away from /login and /signup
 const GuestRoute = () => {
     const { user, loading } = useAuth();
@@ -45,8 +59,12 @@ function App() {
             <AuthProvider>
                 <WalletProvider>
                     <Routes>
+                        {/* Standalone widget — no auth, no layout */}
+                        <Route path="/widget" element={<WidgetPage />} />
+
                         {/* Public */}
                         <Route path="/" element={<Home />} />
+                        <Route path="/business" element={<BusinessHome />} />
 
                         {/* Auth routes — redirect to dashboard if already logged in */}
                         <Route element={<GuestRoute />}>
@@ -57,7 +75,7 @@ function App() {
                         {/* Protected — wrapped in sidebar layout */}
                         <Route element={<ProtectedRoute />}>
                             <Route element={<AppLayout />}>
-                                <Route path="/dashboard" element={<DashboardPage />} />
+                                <Route path="/dashboard" element={<DashboardRoute />} />
                                 <Route path="/wallet" element={<WalletPage />} />
                                 <Route path="/payments" element={<PaymentsPage />} />
                                 <Route path="/subscriptions" element={<SubscriptionsPage />} />

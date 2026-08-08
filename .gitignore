@@ -26,6 +26,8 @@ dist-ssr
 *.sln
 *.sw?
 recovery/
+middleware/
+migrations/
 
 # Environment
 .env
